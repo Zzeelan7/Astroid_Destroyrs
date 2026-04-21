@@ -1,0 +1,108 @@
+version: '3.9'
+
+services:
+  # Backend API
+  api:
+    build:
+      context: ./backend
+      dockerfile: ../docker/Dockerfile.api
+    container_name: gridcharge-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://gridcharge:password@postgres:5432/gridcharge
+      - REDIS_URL=redis://redis:6379/0
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+    depends_on:
+      - postgres
+      - redis
+      - mosquitto
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: gridcharge-postgres
+    environment:
+      - POSTGRES_USER=gridcharge
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=gridcharge
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gridcharge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: gridcharge-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MQTT Broker (for IoT sensor telemetry)
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: gridcharge-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+
+  # Frontend (React)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    container_name: gridcharge-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    depends_on:
+      - api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+  # EV Simulator (for testing/demo)
+  simulator:
+    build:
+      context: ./simulator
+      dockerfile: ../docker/Dockerfile.simulator
+    container_name: gridcharge-simulator
+    environment:
+      - API_URL=http://api:8000
+      - MQTT_BROKER=mosquitto
+    depends_on:
+      - api
+      - mosquitto
+    volumes:
+      - ./simulator:/app
+
+volumes:
+  postgres_data:
+  redis_data:
+  mosquitto_data:
+  mosquitto_logs:
+
+networks:
+  default:
+    name: gridcharge-network

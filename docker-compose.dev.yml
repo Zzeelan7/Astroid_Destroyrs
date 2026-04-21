@@ -1,0 +1,42 @@
+# Dockerfile for local development
+version: '3.9'
+
+services:
+  api-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: gridcharge-api-dev
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://gridcharge:password@postgres:5432/gridcharge
+      - REDIS_URL=redis://redis:6379/0
+      - MQTT_BROKER=mosquitto
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: gridcharge-postgres
+    environment:
+      POSTGRES_USER: gridcharge
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: gridcharge
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: gridcharge-redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:

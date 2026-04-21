@@ -1,0 +1,43 @@
+{
+  "name": "GridCharge Hackathon",
+  "version": "1.0.0",
+  "description": "Grid Stress-Aware EV Charging Slot Allocation System",
+  "author": "GridCharge Team",
+  "license": "MIT",
+  "keywords": [
+    "EV",
+    "electric-vehicles",
+    "charging",
+    "grid-optimization",
+    "smart-infrastructure",
+    "renewable-energy",
+    "V2G",
+    "vehicle-to-grid",
+    "hackathon"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gridcharge/hackathon"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "python": ">=3.11"
+  },
+  "scripts": {
+    "dev": "docker compose up --build",
+    "prod": "docker compose -f docker-compose.yml up --build -d",
+    "stop": "docker compose down",
+    "test": "pytest tests/ -v --cov=app",
+    "demo": "bash scripts/demo.sh",
+    "logs": "docker compose logs -f",
+    "clean": "docker compose down -v"
+  },
+  "directories": {
+    "backend": "Backend FastAPI service",
+    "frontend": "React web dashboard",
+    "simulator": "EV simulator for testing",
+    "tests": "Unit & integration tests",
+    "docker": "Container configurations",
+    "scripts": "Demo & utility scripts"
+  }
+}
