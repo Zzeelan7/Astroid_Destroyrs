@@ -3,11 +3,15 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
+ARG REACT_APP_API_URL=http://gridcharge-api:8000
+
 COPY package*.json ./
 RUN npm ci
 
 COPY public ./public
 COPY src ./src
+
+ENV REACT_APP_API_URL=${REACT_APP_API_URL}
 RUN npm run build
 
 FROM node:18-alpine
@@ -20,4 +24,5 @@ COPY --from=builder /app/build ./build
 
 EXPOSE 3000
 
-CMD ["serve", "-s", "build", "-l", "3000"]
+# Serve the static build, fallback to index.html for SPA routing
+CMD ["serve", "-s", "build", "-l", "3000", "--single"]

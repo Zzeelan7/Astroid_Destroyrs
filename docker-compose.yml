@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   # Backend API
   api:
@@ -71,31 +69,18 @@ services:
     build:
       context: ./frontend
       dockerfile: ../docker/Dockerfile.frontend
+      args:
+        REACT_APP_API_URL: http://gridcharge-api:8000
     container_name: gridcharge-frontend
     ports:
       - "3000:3000"
     environment:
-      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_API_URL=http://gridcharge-api:8000
     depends_on:
       - api
     volumes:
       - ./frontend:/app
       - /app/node_modules
-
-  # EV Simulator (for testing/demo)
-  simulator:
-    build:
-      context: ./simulator
-      dockerfile: ../docker/Dockerfile.simulator
-    container_name: gridcharge-simulator
-    environment:
-      - API_URL=http://api:8000
-      - MQTT_BROKER=mosquitto
-    depends_on:
-      - api
-      - mosquitto
-    volumes:
-      - ./simulator:/app
 
 volumes:
   postgres_data:
