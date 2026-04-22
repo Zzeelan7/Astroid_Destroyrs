@@ -20,6 +20,12 @@ class GridStatusResponse(BaseModel):
     max_power_kw: float
     allow_new_connections: bool
     v2g_enabled: bool
+    # Raw sensor metrics (populated by simulator)
+    load_percentage: Optional[float] = None
+    frequency_hz: Optional[float] = None
+    transformer_temp_pct: Optional[float] = None
+    renewable_penetration_pct: Optional[float] = None
+    scenario: Optional[str] = None
 
 
 class ChargingRequestRequest(BaseModel):

@@ -2,27 +2,29 @@
 FastAPI main application
 GridCharge: Grid Stress-Aware EV Charging Slot Allocation
 """
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import asyncio
 from contextlib import asynccontextmanager
 
-from app.api import health, charging, grid, v2g
-from app.core.gsi_engine import GSIEngine
-from app.core.slot_allocator import SlotAllocator
-from app.core.v2g_manager import V2GManager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-
-# Global state
-gsi_engine = GSIEngine()
-slot_allocator = SlotAllocator()
-v2g_manager = V2GManager()
+from .api import health, charging, grid, v2g
+from .state import simulator
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown events"""
-    print("[*] GridCharge API starting...")
+    """Startup: launch background simulation tasks. Shutdown: cancel them."""
+    print("[*] GridCharge API starting — launching background simulators...")
+    grid_task = asyncio.create_task(simulator.run(),        name="grid_sim")
+    ev_task   = asyncio.create_task(simulator.run_auto_ev(), name="ev_sim")
     yield
+    grid_task.cancel()
+    ev_task.cancel()
+    try:
+        await asyncio.gather(grid_task, ev_task, return_exceptions=True)
+    except Exception:
+        pass
     print("[*] GridCharge API shutdown")
 
 
@@ -30,10 +32,9 @@ app = FastAPI(
     title="GridCharge API",
     description="Grid Stress-Aware EV Charging Slot Allocation",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -42,21 +43,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register routers
-app.include_router(health.router, prefix="/api/health", tags=["health"])
+app.include_router(health.router,   prefix="/api/health",   tags=["health"])
 app.include_router(charging.router, prefix="/api/charging", tags=["charging"])
-app.include_router(grid.router, prefix="/api/grid", tags=["grid"])
-app.include_router(v2g.router, prefix="/api/v2g", tags=["v2g"])
+app.include_router(grid.router,     prefix="/api/grid",     tags=["grid"])
+app.include_router(v2g.router,      prefix="/api/v2g",      tags=["v2g"])
 
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
     return {
         "service": "GridCharge API",
         "version": "1.0.0",
         "status": "🟢 Online",
-        "docs": "/docs"
+        "docs": "/docs",
     }
 
 

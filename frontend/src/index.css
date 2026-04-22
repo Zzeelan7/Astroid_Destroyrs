@@ -651,3 +651,56 @@ button { cursor: pointer; }
   }
   .stats-grid { grid-template-columns: 1fr 1fr; }
 }
+/* -- Scenario badge (header) ----------------------------------- */
+.scenario-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--mid);
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  background: var(--bg2);
+}
+
+/* -- Frequency readout ---------------------------------------- */
+.freq-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg2);
+}
+
+.freq-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--muted);
+}
+
+.freq-val {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--light);
+  letter-spacing: 1px;
+  transition: color 0.4s;
+}
+
+.freq-warn {
+  color: var(--red-c);
+  animation: pulse 1s infinite;
+}
+
+/* -- V2G session dot ------------------------------------------ */
+.dot-v2g {
+  color: var(--yellow);
+  font-size: 12px;
+}
+
+/* -- Disabled button state ------------------------------------ */
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
