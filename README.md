@@ -1,237 +1,107 @@
-# GridCharge: Grid Stress-Aware EV Charging Slot Allocation
+# GridCharge: Grid Stress-Aware EV Charging System
 
-🚀 **Hackathon-Ready MVP** | Production Docker Setup | Real Optimization Algorithms
+🚀 **Next-Gen Smart Charging** | 3D Visualization | Real-Time Optimization | Automated V2G
 
 ---
 
 ## 🎯 What This Does
 
-A complete smart charging system that:
-- ✅ Computes **real-time Grid Stress Index (GSI)** on 0-100 scale
-- ✅ Allocates charging slots using **6-tier priority** (emergency → opportunistic)
-- ✅ **Throttles power dynamically** as grid stress increases (150kW → 3.7kW)
-- ✅ Enables **V2G discharge** during critical grid events (Red GSI > 75)
-- ✅ **Optimizes for renewable energy** (cheaper charging during green windows)
-- ✅ **One-command Docker Compose** deployment
+A complete smart charging system designed to stabilize the power grid while meeting EV user needs:
+- ✅ **Dynamic Grid Stress Index (GSI)**: Real-time 0-100 score based on load, frequency, temperature, and renewables.
+- ✅ **6-Tier Priority Allocation**: Intelligent slot assignment (Emergency → Opportunistic).
+- ✅ **Adaptive Throttling**: Smooth power transitions (150kW → 3.7kW) to prevent grid blackouts.
+- ✅ **Automated V2G (Vehicle-to-Grid)**: Fully automated discharge during Red GSI (>75) with real-time compensation accumulation.
+- ✅ **3D Interactive Dashboard**: Live visual feedback of the grid "core" and charging sessions.
+- ✅ **Stateful Simulator**: Built-in background simulation of EV fleets and grid scenarios.
 
 ---
 
-## 🏗️ Project Structure
+## 🏗️ Project Architecture
 
 ```
 Astroid_destroyrs/
-├── backend/                    # FastAPI microservice
+├── backend/                    # FastAPI High-Performance Backend
 │   ├── app/
-│   │   ├── core/              # Domain logic (GSI, slot allocator, V2G)
-│   │   ├── api/               # REST endpoints
-│   │   ├── models/            # Pydantic schemas
-│   │   └── main.py            # FastAPI app
-│   └── requirements.txt
-├── frontend/                   # React dashboard
+│   │   ├── core/              # Optimization Algorithms (GSI, SAE, V2G)
+│   │   ├── api/               # Real-time REST Endpoints
+│   │   └── state.py           # Stateful Background Simulator
+├── frontend/                   # React + Three.js Dashboard
 │   ├── src/
-│   │   ├── App.jsx            # Main component
-│   │   └── index.css          # Tailwind styles
-│   └── package.json
-├── simulator/                  # EV simulator + grid stress events
-│   ├── simulator.py           # Demo scenario generator
-│   └── requirements.txt
-├── tests/                      # Unit tests
-│   ├── test_gsi_engine.py     # GSI algorithm tests
-│   ├── test_slot_allocator.py # Slot logic tests
-│   └── test_v2g_manager.py    # V2G discharge tests
-├── docker/                     # Dockerfiles
-│   ├── Dockerfile.api
-│   ├── Dockerfile.frontend
-│   ├── Dockerfile.simulator
-│   └── mosquitto.conf
-├── scripts/                    # Demo & test scripts
-│   ├── demo.sh                # Judge walkthrough
-│   └── run-tests.sh           # Test runner
-└── docker-compose.yml          # Full stack orchestration
+│   │   ├── App.js             # Main UI Logic
+│   │   └── index.css          # Premium Glassmorphic Design
+├── docker/                     # Containerization
+│   ├── Dockerfile.api         # Python 3.11-slim
+│   └── Dockerfile.frontend    # Node.js 20 + Vite
+└── docker-compose.yml          # Full-Stack Orchestration
 ```
 
 ---
 
-## ⚡ Quick Start (Judge Demo)
+## ⚡ Quick Start
 
-### 1. Start the Stack
-
+### 1. Launch the Stack
 ```bash
-cd C:\Users\zzeel\OneDrive\Desktop\Astroid_destroyrs
 docker compose up --build
 ```
 
-This spins up:
-- **FastAPI** backend on http://localhost:8000
-- **React** frontend on http://localhost:3000
-- **PostgreSQL** database
-- **Redis** cache
-- **MQTT** broker (for IoT sensors)
-- **EV Simulator** (optional)
-
-### 2. Open Browser
-
-```
-Frontend Dashboard: http://localhost:3000
-API Swagger Docs:  http://localhost:8000/docs
-```
-
-### 3. Run 2-Minute Judge Demo
-
-```bash
-bash scripts/demo.sh
-```
-
-This script:
-1. Tests API health
-2. Simulates **Green GSI** → EV gets 150 kW
-3. Triggers **Orange GSI** → Power throttled to 22 kW
-4. Triggers **Red GSI** → V2G discharge offer activated
-5. Shows active sessions and V2G status
+### 2. Access the System
+- **Dashboard**: [http://localhost:3000](http://localhost:3000)
+- **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
-## 🧠 Core Algorithms
+## 🧠 Core Intelligence
 
 ### GSI Engine (Grid Stress Index)
+The system computes a weighted index to determine charging policy:
+`GSI = 0.40×(Load%) + 0.30×(Freq Dev) + 0.20×(Transformer Temp) - 0.10×(Renewable%)`
 
-```python
-GSI = 0.40×(Load%) + 0.30×(Freq Dev Index) 
-    + 0.20×(Transformer Temp%) - 0.10×(Renewable%)
-```
+| GSI Range | Status | Power Policy |
+|-----------|--------|--------------|
+| 0–30     | 🟢 Green | Unrestricted Fast Charging (150kW) |
+| 31–55    | 🟡 Yellow | Standard Charging (22kW) |
+| 56–75    | 🟠 Orange | Throttled Charging (7.4kW) |
+| 76–100   | 🔴 Red | V2G Active; Emergency Only (3.7kW) |
 
-**Policy Tiers:**
-| GSI Range | Status | Policy |
-|-----------|--------|--------|
-| 0–30     | 🟢 Green | All slots open; 150 kW DC fast |
-| 31–55    | 🟡 Yellow | Throttle to 80% power (22 kW) |
-| 56–75    | 🟠 Orange | Priority-only slots; 7 kW |
-| 76–100   | 🔴 Red | P0/P1 only; V2G activated; 3.7 kW |
+### SAE (Slot Allocation Engine)
+Prioritizes vehicles based on tier, SoC urgency, and renewable availability:
+- **P0 Emergency**: Never deferred; priority access.
+- **P1 Critical**: SoC < 10%; prioritized recovery.
+- **P2-P4 Public/Fleet**: Balanced based on departure time.
+- **P5 Opportunistic**: Flexible; chargers only when GSI is Green.
 
-### Slot Allocation (Priority-Based)
-
-**Priority Tiers (P0 = Emergency → P5 = Opportunistic):**
-- **P0**: Ambulances/fire → Never deferred
-- **P1**: Battery critical (<10% SoC) → Max 5 min deferral
-- **P2**: Fleet/taxis → Max 15 min deferral
-- **P3**: Pre-booked public → Max 20 min deferral
-- **P4**: Walk-in public → Max 45 min deferral
-- **P5**: Opportunity charge (>70% SoC) → Fully flexible
-
-**Score = `0.3×(1/SoC) + 0.4×(Tier Weight) + 0.2×(Wait Impact) - 0.1×(GSI Penalty)`**
-
-### V2G Discharge (Grid Stress Relief)
-
-- **Triggered when:** GSI > 75 (Red)
-- **Source:** Vehicles with SoC > 60% and >15 min to departure
-- **Power:** Up to 10 kW per vehicle (residential-safe)
-- **Compensation:** ₹2.5/kWh or charging credits
-- **Aggregate Capacity:** ~1 MW at 100-port station
+### V2G (Vehicle-to-Grid) Discharge
+- **Automation**: Triggers automatically when GSI > 75.
+- **Eligibility**: SoC > 60% and >15 min to departure.
+- **Reward**: ₹2.5/kWh accumulated in real-time on the dashboard.
 
 ---
 
-## 🧪 Tests
+## 📊 Dashboard Features
 
-Run the full test suite:
+- **3D Grid Core**: Interactive visualization that reacts to grid stress (turns red/vibrates under load).
+- **Live Metric Bars**: Real-time tracking of Frequency, Temperature, and Renewable mix.
+- **Manual Stress Injection**: Test system resilience by triggering "Peak Stress" or "Transformer Failure" buttons.
+- **Session Tracking**: Monitor every EV's power level and priority status live.
 
+---
+
+## 🏆 Innovation Highlights
+
+1. **Power Recovery Logic**: Unlike basic systems, GridCharge allows power to "ramp back up" to fast-charging once grid stress subsides.
+2. **Automated Queueing**: Advanced heapq-based queueing ensures high-priority vehicles jump to the front of the line.
+3. **Glassmorphic UI**: Premium, dark-mode dashboard designed for industrial NOC (Network Operations Center) environments.
+4. **Resilient Scaling**: Built with a singleton state pattern in Python, ready for horizontal scaling behind a load balancer.
+
+---
+
+## 🧪 Development & Testing
+
+Run backend logic tests:
 ```bash
-pytest tests/ -v --cov=app
-```
-
-Covers:
-- ✅ GSI score calculation for all 4 tiers
-- ✅ Renewable energy impact on GSI
-- ✅ Slot allocation priority ordering
-- ✅ Power throttling by GSI level
-- ✅ V2G discharge eligibility & compensation
-
----
-
-## 📊 API Endpoints
-
-### Grid Monitoring
-```
-POST /api/grid/status → Get current GSI
-GET  /api/grid/forecast → Predict next 24h stress
-```
-
-### Charging Management
-```
-POST /api/charging/request-slot → Allocate slot to EV
-GET  /api/charging/active-sessions → View all active charges
-POST /api/charging/rebalance → Trigger power rebalancing
-```
-
-### V2G Program
-```
-POST /api/v2g/register → Register V2G vehicle
-POST /api/v2g/request-discharge → Request discharge during crisis
-GET  /api/v2g/status → V2G program metrics
-```
-
-### Health & Info
-```
-GET  /api/health/ → Service status
-GET  / → API root
-GET  /docs → OpenAPI/Swagger documentation
+pytest backend/tests/ -v
 ```
 
 ---
 
-## 🎬 Judge Walkthrough Flow
-
-**Total Time: 2 minutes**
-
-| Time | Action | Expected Result |
-|------|--------|-----------------|
-| 0:00 | API health check | ✅ Service online |
-| 0:15 | Grid Green; EV arrives | ✅ Slot assigned; 150 kW |
-| 0:30 | Grid transitions Orange | ⚠️ Power throttled to 22 kW |
-| 1:00 | Grid Critical (Red) | 🔴 V2G offer activated |
-| 1:15 | Show active sessions | 📊 Real-time queue visible |
-| 1:30 | Show V2G status | 💰 Compensation & capacity |
-| 2:00 | Demo complete | 🚀 All features demonstrated |
-
----
-
-## 🏆 What Impresses Judges
-
-1. **Real Algorithm:** GSI isn't hand-waved; it's a proper weighted formula with 4 tiers
-2. **Priority System:** 6-tier slot allocation with hard constraints & deferrals
-3. **V2G Integration:** Actually offers discharge during grid stress, calculates compensation
-4. **Renewable Optimization:** GSI includes renewable % (negative weight = lower stress)
-5. **Adaptive Throttling:** Power gracefully reduces (150→22→7→3.7 kW), never sudden cuts
-6. **Docker Ready:** One command deploys everything; judges can run it locally
-7. **Tests Included:** Proves algorithms work correctly under edge cases
-8. **Scalable Design:** 3-layer architecture (cloud AI + edge controller + physical) hints at production readiness
-
----
-
-## 🚀 Next Steps (Post-Hackathon)
-
-1. **LSTM Forecasting:** Train on real utility data to predict GSI 24-48h ahead
-2. **Kubernetes Deployment:** Scale to 1000+ charging stations
-3. **Real OCPP Integration:** Connect to actual EV charging networks
-4. **Mobile App:** Native iOS/Android for real-time slot reservations
-5. **Dashboard Analytics:** Revenue by time-of-day, carbon savings, V2G metrics
-6. **Cloud Storage:** PostgreSQL → Managed RDS + Time-series DB for grid telemetry
-
----
-
-## 📝 License & Contact
-
-Built for hackathon. Production deployment requires utility partnerships & regulatory compliance.
-
----
-
-**🎯 TL;DR for Judges:**
-- ✅ Fully functional smart charging system
-- ✅ Real optimization algorithms (not toy code)
-- ✅ Docker Compose = instant local demo
-- ✅ 2-minute walkthrough shows all features
-- ✅ Unit tests prove correctness
-- ✅ Hackathon submission ready
-
-**Deploy:** `docker compose up --build`
-**Demo:** `bash scripts/demo.sh`
-**Dashboard:** http://localhost:3000
+**Built for the Future of Energy.** 🔋🌍
