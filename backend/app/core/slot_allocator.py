@@ -194,9 +194,9 @@ class SlotAllocator:
     def _compute_power_level(self, gsi: float, available_power: float) -> float:
         """Adaptive throttling: reduce power as GSI increases"""
         if gsi <= 30:
-            return min(available_power, ChargingLevel.LEVEL_4)  # 150 kW
-        elif gsi <= 55:
-            return min(available_power, ChargingLevel.LEVEL_3)  # 22 kW
+            return min(available_power, ChargingLevel.LEVEL_4)  # 150 kW (100%)
+        elif gsi <= 50:
+            return min(available_power, ChargingLevel.LEVEL_4 * 0.5)  # 75 kW (50%)
         elif gsi <= 75:
             return min(available_power, ChargingLevel.LEVEL_2)  # 7.4 kW
         else:
@@ -226,10 +226,25 @@ class SlotAllocator:
         Periodic re-optimization: if GSI changes, adjust power levels for all sessions.
         Allows both throttling down (stress increase) and ramping up (stress decrease).
         """
+        import asyncio
+        try:
+            from ..api.ws import manager
+        except ImportError:
+            manager = None
+
         for vehicle_id, session in list(self.active_sessions.items()):
+            old_power = session.get("power_kw", 0)
             new_power = self._compute_power_level(gsi, self.station_capacity_kw)
+            
             # Update power level to reflect current grid conditions
             session["power_kw"] = new_power
+            
+            if manager and old_power == ChargingLevel.FLOOR and new_power > old_power:
+                asyncio.create_task(manager.broadcast({
+                    "type": "POWER_RAMP",
+                    "session_id": vehicle_id,
+                    "new_power_kw": new_power
+                }))
     
     def process_departures(self, current_gsi: float) -> List[str]:
         """Check for vehicles that should depart; free up slots and pull from queue."""

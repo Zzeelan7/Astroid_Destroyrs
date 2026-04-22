@@ -158,3 +158,35 @@ async def trigger_rebalance():
         "gsi": gsi,
         "active_sessions": len(simulator.slot_allocator.active_sessions),
     }
+
+@router.post("/slots/escalate")
+async def escalate_to_p0(payload: dict):
+    """Escalate a specific vehicle to P0 Emergency priority"""
+    vehicle_id = payload.get("vehicle_id")
+    if not vehicle_id:
+        return {"error": "vehicle_id required"}
+        
+    # Check active sessions
+    for vid, sess in simulator.slot_allocator.active_sessions.items():
+        if vid == vehicle_id:
+            if "ev" in sess:
+                sess["ev"].user_priority = PriorityTier.P0
+            # Force immediate rebalance
+            simulator.slot_allocator.rebalance_power(simulator.level.gsi_score)
+            return {"status": "escalated", "vehicle_id": vehicle_id, "priority": 0}
+            
+    # Check queue
+    for i, q_item in enumerate(simulator.slot_allocator.queue):
+        if q_item[2].vehicle_id == vehicle_id:
+            q_item[2].user_priority = PriorityTier.P0
+            # Re-heapify queue
+            import heapq
+            new_q = []
+            for item in simulator.slot_allocator.queue:
+                priority = item[2].user_priority.value
+                heapq.heappush(new_q, (priority, item[1], item[2]))
+            simulator.slot_allocator.queue = new_q
+            simulator.slot_allocator.process_queue(simulator.level.gsi_score)
+            return {"status": "escalated_in_queue", "vehicle_id": vehicle_id, "priority": 0}
+            
+    return {"error": "Vehicle not found in active sessions or queue"}

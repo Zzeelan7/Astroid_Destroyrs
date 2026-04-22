@@ -57,3 +57,15 @@ async def get_v2g_status():
         current_v2g_capacity_kw=status["current_v2g_capacity_kw"],
         total_compensation_paid=status["total_compensation_paid"],
     )
+
+@router.get("/session/{vehicle_id}/earnings")
+async def get_v2g_session_earnings(vehicle_id: str):
+    participant = simulator.v2g_manager.participants.get(vehicle_id)
+    if not participant:
+        return {"error": "Vehicle not registered for V2G"}
+    return {
+        "session_id": f"{vehicle_id}-v2g",
+        "energy_kwh": participant.compensation_earned_inr / simulator.v2g_manager.DISCHARGE_RATE_PER_KWH if participant.compensation_earned_inr > 0 else 0.0,
+        "compensation_inr": participant.compensation_earned_inr,
+        "status": participant.status
+    }

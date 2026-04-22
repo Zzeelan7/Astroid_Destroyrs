@@ -10,7 +10,15 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { Routes, Route, Link } from 'react-router-dom';
 import VehicleSimulatorPanel from './VehicleSimulatorPanel';
+import { useWebSocket } from './useWebSocket';
+import V2GEarningsWidget from './V2GEarningsWidget';
+import NotificationLayer from './NotificationLayer';
+import OnboardingTour from './OnboardingTour';
+import TransformerHeatmap from './TransformerHeatmap';
+import History from './History';
+import Admin from './Admin';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -32,9 +40,14 @@ const SCENARIO_LABELS = {
 // ─── Gauge ────────────────────────────────────────────────────────────────────
 function GSIGauge({ score }) {
   const r    = 80;
-  const circ = 2 * Math.PI * r;
+  const circ = Math.PI * r;
   const dash = (score / 100) * circ;
   const gap  = circ - dash;
+
+  const color =
+    score <= 40 ? '#16a34a'
+    : score <= 74 ? '#eab308'
+    : '#dc2626';
 
   const label =
     score <= 30 ? 'LOW STRESS'
@@ -43,38 +56,25 @@ function GSIGauge({ score }) {
     : 'CRITICAL';
 
   return (
-    <div className="gauge-wrapper">
-      <svg width="200" height="200" viewBox="0 0 200 200">
-        <circle cx="100" cy="100" r={r} fill="none" stroke="#1a1a1a" strokeWidth="12" />
-        {[0, 25, 50, 75, 100].map((v) => {
-          const angle = (v / 100) * 360 - 90;
-          const rad   = (angle * Math.PI) / 180;
-          const x1    = 100 + (r - 18) * Math.cos(rad);
-          const y1    = 100 + (r - 18) * Math.sin(rad);
-          const x2    = 100 + (r + 5)  * Math.cos(rad);
-          const y2    = 100 + (r + 5)  * Math.sin(rad);
-          return <line key={v} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#333" strokeWidth="1.5" />;
-        })}
-        <circle
-          cx="100" cy="100" r={r}
+    <div className="gauge-wrapper" style={{ height: '140px', overflow: 'hidden' }}>
+      <svg width="200" height="120" viewBox="0 0 200 120">
+        <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#1a1a1a" strokeWidth="16" strokeLinecap="round" />
+        <path
+          d="M 20 100 A 80 80 0 0 1 180 100"
           fill="none"
-          stroke="white"
-          strokeWidth="12"
+          stroke={color}
+          strokeWidth="16"
           strokeDasharray={`${dash} ${gap}`}
-          strokeDashoffset={circ * 0.25}
-          strokeLinecap="butt"
-          style={{ transition: 'stroke-dasharray 0.8s cubic-bezier(0.4,0,0.2,1)' }}
+          strokeDashoffset="0"
+          strokeLinecap="round"
+          style={{ transition: 'stroke-dasharray 0.8s cubic-bezier(0.4,0,0.2,1), stroke 0.8s ease' }}
         />
-        <text x="100" y="92"  textAnchor="middle" fill="white" fontSize="38"
+        <text x="100" y="85"  textAnchor="middle" fill="white" fontSize="38"
               fontFamily="'IBM Plex Mono',monospace" fontWeight="700">
           {score.toFixed(0)}
         </text>
-        <text x="100" y="112" textAnchor="middle" fill="#666" fontSize="11"
-              fontFamily="'IBM Plex Mono',monospace" letterSpacing="3">
-          / 100
-        </text>
-        <text x="100" y="134" textAnchor="middle" fill="#aaa" fontSize="10"
-              fontFamily="'IBM Plex Mono',monospace" letterSpacing="2">
+        <text x="100" y="115" textAnchor="middle" fill={color} fontSize="12"
+              fontFamily="'IBM Plex Mono',monospace" letterSpacing="2" fontWeight="bold">
           {label}
         </text>
       </svg>
@@ -105,15 +105,26 @@ function LogEntry({ time, msg, type }) {
   );
 }
 
-function SessionRow({ id, power, time, isV2g, index }) {
+function SessionRow({ id, power, time, isV2g, index, onEscalate }) {
   return (
-    <div className="session-row" style={{ animationDelay: `${index * 60}ms` }}>
-      <span className="session-id">{id}</span>
-      <span className="session-power">
-        {power.toFixed(1)} <span style={{ color: '#555', fontSize: '11px' }}>kW</span>
-      </span>
-      <span className="session-time">{time}m</span>
-      <span className={`session-dot ${isV2g ? 'dot-v2g' : ''}`}>{isV2g ? '⚡' : '●'}</span>
+    <div className={`session-card ${isV2g ? 'v2g-active' : ''}`} style={{ animationDelay: `${index * 60}ms` }}>
+      <div className="session-card-header">
+        <span className="session-id">{id}</span>
+        {isV2g ? <span className="badge badge-v2g">⚡ DISCHARGING</span> : <span className="badge badge-charging">● CHARGING</span>}
+      </div>
+      <div className="session-card-body">
+        <div className="session-stat">
+          <span className="stat-val">{power.toFixed(1)}</span>
+          <span className="stat-unit">kW</span>
+        </div>
+        <div className="session-stat">
+          <span className="stat-val">{time}</span>
+          <span className="stat-unit">min</span>
+        </div>
+        <button className="btn btn-sm btn-danger" onClick={() => onEscalate(id)} title="Emergency Escalate (P0)">
+          🚨 P0
+        </button>
+      </div>
     </div>
   );
 }
@@ -217,6 +228,7 @@ function ThreeGridScene({ intensity = 0.4 }) {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
+  const wsData = useWebSocket();
   const [gridStatus, setGridStatus] = useState(null);
   const [sessions,   setSessions]   = useState({ total_active: 0, queued: 0, sessions: [] });
   const [v2g,        setV2g]        = useState({
@@ -226,7 +238,7 @@ export default function App() {
   const [log,     setLog]     = useState([]);
   const [healthy, setHealthy] = useState(null);
   const [busy,    setBusy]    = useState(false);   // button debounce
-  const [history, setHistory] = useState([]);
+  const [historyData, setHistoryData] = useState([]);
   const [externalSignals, setExternalSignals] = useState({
     online: false, temperature_c: null, wind_speed_kmh: null, cloud_cover_pct: null, updated_at: null,
   });
@@ -290,10 +302,10 @@ export default function App() {
     } catch {}
   }, []);
 
-  const fetchHistory = useCallback(async () => {
+  const fetchHistoryData = useCallback(async () => {
     try {
       const res = await axios.get(`${API_URL}/api/grid/history?limit=80`, { timeout: 5000 });
-      setHistory(res.data.points || []);
+      setHistoryData(res.data.points || []);
     } catch {}
   }, []);
 
@@ -311,7 +323,7 @@ export default function App() {
     fetchGrid();
     fetchSessions();
     fetchV2G();
-    fetchHistory();
+    fetchHistoryData();
     fetchExternalSignals();
     addLog('GridCharge dashboard connected', 'info');
     addLog(`API endpoint: ${API_URL}`, 'info');
@@ -323,12 +335,12 @@ export default function App() {
       fetchGrid();
       fetchSessions();
       fetchV2G();
-      fetchHistory();
+      fetchHistoryData();
       fetchExternalSignals();
     }, 3000);
     const h = setInterval(fetchHealth, 15000);
     return () => { clearInterval(t); clearInterval(h); };
-  }, [fetchGrid, fetchSessions, fetchV2G, fetchHealth, fetchHistory, fetchExternalSignals]);
+  }, [fetchGrid, fetchSessions, fetchV2G, fetchHealth, fetchHistoryData, fetchExternalSignals]);
 
   // ── User actions ──────────────────────────────────────────────────────────
 
@@ -410,6 +422,16 @@ export default function App() {
     setBusy(false);
   };
 
+  const escalateP0 = async (vehicleId) => {
+    try {
+      await axios.post(`${API_URL}/api/slots/escalate`, { vehicle_id: vehicleId });
+      addLog(`Escalated ${vehicleId} to P0 Emergency`, 'critical');
+      fetchSessions();
+    } catch {
+      addLog(`Failed to escalate ${vehicleId}`, 'error');
+    }
+  };
+
   const setSimulationState = async (payload, label) => {
     if (busy) return;
     setBusy(true);
@@ -433,7 +455,7 @@ export default function App() {
     :             { label: '🔴 RED',    cls: 'tier-red'    };
 
   const scenarioLabel = SCENARIO_LABELS[gridStatus?.scenario] ?? '—';
-  const chartData = history.map((p) => ({
+  const chartData = historyData.map((p) => ({
     t: p.timestamp ? p.timestamp.slice(11, 19) : '--:--:--',
     gsi: p.gsi_score,
     load: p.load_percentage,
@@ -446,15 +468,24 @@ export default function App() {
   return (
     <div className="app">
       <div className="scanlines" />
+      <NotificationLayer wsData={wsData} />
+      <OnboardingTour />
 
       {/* ── Header ── */}
       <header className="header">
         <div className="header-left">
-          <div className="logo">
-            <span className="logo-sym">⚡</span>
-            <span className="logo-text">GRIDCHARGE</span>
-          </div>
+          <Link to="/" style={{ textDecoration: 'none' }}>
+            <div className="logo">
+              <span className="logo-sym">⚡</span>
+              <span className="logo-text">GRIDCHARGE</span>
+            </div>
+          </Link>
           <div className="header-sub">Grid Stress-Aware EV Charging System</div>
+          <div style={{ marginLeft: '2rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <Link to="/" className="nav-link" style={{color: '#aaa', textDecoration: 'none', fontWeight: 'bold'}}>DASHBOARD</Link>
+            <Link to="/history" className="nav-link" style={{color: '#aaa', textDecoration: 'none', fontWeight: 'bold'}}>HISTORY</Link>
+            <Link to="/admin" className="nav-link" style={{color: '#aaa', textDecoration: 'none', fontWeight: 'bold'}}>ADMIN</Link>
+          </div>
         </div>
         <div className="header-right">
           <div className={`status-pill ${healthy ? 'pill-ok' : healthy === false ? 'pill-err' : 'pill-ok'}`}>
@@ -467,9 +498,14 @@ export default function App() {
       </header>
 
       <main className="main">
-
-        {/* ── Column 1 — GSI ── */}
-        <section className="panel panel-gsi">
+        <Routes>
+          <Route path="/history" element={<History />} />
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/" element={
+            <>
+              {/* ── Column 1 — GSI ── */}
+              <section className="col-left panel-gsi">
+                <div className="panel panel-gsi-inner">
           <div className="panel-header">
             <span className="panel-title">GRID STRESS INDEX</span>
             <span className={`tier-badge ${tier.cls}`}>{tier.label}</span>
@@ -509,16 +545,19 @@ export default function App() {
             </div>
           </div>
 
-          {/* Live frequency readout */}
-          <div className="freq-bar">
-            <span className="freq-label">GRID FREQ</span>
-            <span className={`freq-val ${
-              Math.abs((gridStatus?.frequency_hz ?? 50) - 50) > 0.3 ? 'freq-warn' : ''
-            }`}>
-              {gridStatus?.frequency_hz?.toFixed(3) ?? '—'} Hz
-            </span>
-          </div>
-        </section>
+                {/* Live frequency readout */}
+                <div className="freq-bar">
+                  <span className="freq-label">GRID FREQ</span>
+                  <span className={`freq-val ${
+                    Math.abs((gridStatus?.frequency_hz ?? 50) - 50) > 0.3 ? 'freq-warn' : ''
+                  }`}>
+                    {gridStatus?.frequency_hz?.toFixed(3) ?? '—'} Hz
+                  </span>
+                </div>
+              </div>
+
+              <TransformerHeatmap gridStatus={gridStatus} />
+            </section>
 
         {/* ── Column 2 — Stats + Sessions ── */}
         <section className="col-mid">
@@ -566,10 +605,11 @@ export default function App() {
                   <SessionRow
                     key={s.vehicle_id}
                     id={s.vehicle_id}
-                    power={s.power_kw}
+                    power={wsData.powerRamps[s.vehicle_id] || s.power_kw}
                     time={s.time_active_minutes}
                     isV2g={s.is_v2g}
                     index={i}
+                    onEscalate={escalateP0}
                   />
                 ))
               )}
@@ -595,19 +635,27 @@ export default function App() {
               <button className="btn btn-primary" onClick={simulateEV} disabled={busy}>
                 + SIMULATE EV ARRIVAL
               </button>
-              <button className="btn btn-danger" onClick={simulateStress} disabled={busy}>
-                ⚡ INJECT STRESS EVENT
-              </button>
             </div>
-            <div className="action-row">
-              <button className="btn btn-danger" onClick={simulateFailure} disabled={busy}>
-                🚨 TRANSFORMER FAILURE
-              </button>
-              <button className="btn btn-primary" onClick={clearFailure} disabled={busy}>
-                ✅ CLEAR FAILURE
-              </button>
+            <div className="action-row" style={{ marginTop: '0.5rem' }}>
+              <select 
+                className="btn" 
+                style={{ width: '100%', background: '#262626', color: '#fff', border: '1px solid #444', textAlign: 'left', padding: '0.5rem' }}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'morning_peak') simulateStress();
+                  else if (val === 'transformer_failure') simulateFailure();
+                  else if (val === 'solar_glut') clearFailure();
+                  e.target.value = "";
+                }}
+                disabled={busy}
+              >
+                <option value="">🎯 Trigger Scenario Preset...</option>
+                <option value="morning_peak">🌅 Morning Peak Rush (Stress)</option>
+                <option value="transformer_failure">🚨 Transformer Failure (Critical)</option>
+                <option value="solar_glut">☀️ Solar Glut (Normal/Abundant)</option>
+              </select>
             </div>
-            <div className="action-row action-row--small">
+            <div className="action-row action-row--small" style={{ marginTop: '1rem' }}>
               <button className="btn btn-primary" onClick={() => setSimulationState({ paused: true }, 'paused')} disabled={busy}>
                 PAUSE
               </button>
@@ -632,7 +680,7 @@ export default function App() {
           <div className="panel panel-history">
             <div className="panel-header">
               <span className="panel-title">GRID STRESS HISTORY (REAL-TIME)</span>
-              <span className="panel-count">{history.length} POINTS</span>
+              <span className="panel-count">{historyData.length} POINTS</span>
             </div>
             <div className="history-chart">
               <ResponsiveContainer width="100%" height={220}>
@@ -691,7 +739,9 @@ export default function App() {
             </div>
           </div>
 
-          <div className="panel panel-tiers">
+          <V2GEarningsWidget wsData={wsData} />
+
+          <div className="panel panel-tiers" style={{ marginTop: '1rem' }}>
             <div className="panel-header">
               <span className="panel-title">PRIORITY TIERS</span>
             </div>
@@ -725,7 +775,10 @@ export default function App() {
             </div>
           </div>
         </section>
-      </main>
+        </>
+      } />
+      </Routes>
+    </main>
 
       <footer className="footer">
         <span>GRIDCHARGE v1.0 — HACKATHON MVP</span>

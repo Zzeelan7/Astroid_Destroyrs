@@ -15,6 +15,7 @@ class V2GParticipant:
     max_discharge_kw: float  # Typically 10 kW for residential safety
     departure_time: datetime
     compensation_requested: Optional[float] = None  # ₹ or credits
+    compensation_earned_inr: float = 0.0
     status: str = "available"  # available, discharging, completed
 
 
@@ -85,9 +86,11 @@ class V2GManager:
         """Calculate compensation for V2G participant"""
         return discharged_kwh * self.DISCHARGE_RATE_PER_KWH
     
-    def add_compensation(self, amount: float):
+    def add_compensation(self, vehicle_id: str, amount: float):
         """Add to the total compensation pool."""
         self.total_compensation_paid += amount
+        if vehicle_id in self.participants:
+            self.participants[vehicle_id].compensation_earned_inr += amount
 
     def stop_v2g_discharge(self, vehicle_id: str, 
                           actual_discharged_kwh: float) -> float:
@@ -99,7 +102,7 @@ class V2GManager:
             participant = self.participants[vehicle_id]
             participant.status = "available"
             compensation = self.calculate_v2g_compensation(vehicle_id, actual_discharged_kwh)
-            self.add_compensation(compensation)
+            self.add_compensation(vehicle_id, compensation)
             return compensation
         
         return 0.0
