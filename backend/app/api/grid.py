@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 """Grid monitoring endpoints"""
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
+from typing import Optional
 
 from ..models import GridMetricsRequest, GridStatusResponse
 from ..state import simulator
@@ -8,8 +11,8 @@ from ..state import simulator
 router = APIRouter()
 
 class SimulationControlRequest(BaseModel):
-    paused: bool | None = None
-    speed_multiplier: float | None = Field(default=None, ge=0.5, le=4.0)
+    paused: Optional[bool] = None
+    speed_multiplier: Optional[float] = Field(default=None, ge=0.5, le=4.0)
 
 
 @router.get("/status", response_model=GridStatusResponse)
