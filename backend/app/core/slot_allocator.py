@@ -223,16 +223,16 @@ class SlotAllocator:
     
     def rebalance_power(self, gsi: float) -> None:
         """
-        Periodic re-optimization: if GSI increased, throttle non-essential sessions.
-        Called every 5 minutes by the main scheduler.
+        Periodic re-optimization: if GSI changes, adjust power levels for all sessions.
+        Allows both throttling down (stress increase) and ramping up (stress decrease).
         """
         for vehicle_id, session in list(self.active_sessions.items()):
             new_power = self._compute_power_level(gsi, self.station_capacity_kw)
-            if new_power < session["power_kw"]:
-                session["power_kw"] = new_power
+            # Update power level to reflect current grid conditions
+            session["power_kw"] = new_power
     
-    def process_departures(self) -> List[str]:
-        """Check for vehicles that should depart; free up slots."""
+    def process_departures(self, current_gsi: float) -> List[str]:
+        """Check for vehicles that should depart; free up slots and pull from queue."""
         now = datetime.now()
         departed = []
         
@@ -240,9 +240,41 @@ class SlotAllocator:
             ev = session["ev"]
             time_remaining = (ev.departure_time - now).total_seconds() / 60
             
-            # If departure time reached or SoC >= target, free slot
+            # If departure time reached, free slot
             if time_remaining <= 0:
                 self.active_sessions.pop(vehicle_id, None)
                 departed.append(vehicle_id)
         
+        # After freeing slots, try to fill them from the queue
+        if departed or len(self.active_sessions) < self.num_slots:
+            self.process_queue(current_gsi)
+            
         return departed
+
+    def process_queue(self, current_gsi: float) -> int:
+        """Attempt to move vehicles from priority queue to active slots."""
+        processed = 0
+        while self.queue and len(self.active_sessions) < self.num_slots:
+            # Check available power
+            current_load = sum(s.get("power_kw", 0) for s in self.active_sessions.values())
+            available_power = self.station_capacity_kw - current_load
+            
+            if available_power < ChargingLevel.FLOOR:
+                break
+                
+            # Pop highest priority (lowest score in heapq)
+            score, vid, ev = heapq.heappop(self.queue)
+            
+            # Double check if already active (shouldn't happen with heapq usually)
+            if vid in self.active_sessions:
+                continue
+                
+            power = self._compute_power_level(current_gsi, available_power)
+            self.active_sessions[vid] = {
+                "power_kw": power,
+                "start_time": datetime.now(),
+                "ev": ev,
+            }
+            processed += 1
+            
+        return processed

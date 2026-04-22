@@ -13,7 +13,6 @@ RUN npm ci --legacy-peer-deps
 # Copy source and build
 COPY public ./public
 COPY src ./src
-COPY tailwind.config.js postcss.config.js ./
 
 RUN npm run build
 

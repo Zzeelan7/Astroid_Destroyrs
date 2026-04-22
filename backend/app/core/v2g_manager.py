@@ -85,9 +85,13 @@ class V2GManager:
         """Calculate compensation for V2G participant"""
         return discharged_kwh * self.DISCHARGE_RATE_PER_KWH
     
+    def add_compensation(self, amount: float):
+        """Add to the total compensation pool."""
+        self.total_compensation_paid += amount
+
     def stop_v2g_discharge(self, vehicle_id: str, 
                           actual_discharged_kwh: float) -> float:
-        """Stop discharge and calculate compensation"""
+        """Stop discharge and calculate final compensation"""
         if vehicle_id in self.active_discharge_sessions:
             self.active_discharge_sessions.pop(vehicle_id, None)
         
@@ -95,7 +99,7 @@ class V2GManager:
             participant = self.participants[vehicle_id]
             participant.status = "available"
             compensation = self.calculate_v2g_compensation(vehicle_id, actual_discharged_kwh)
-            self.total_compensation_paid += compensation
+            self.add_compensation(compensation)
             return compensation
         
         return 0.0

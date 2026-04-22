@@ -163,18 +163,42 @@ class GridSimulator:
         # Rebalance power on existing sessions when GSI changes
         self.slot_allocator.rebalance_power(self.level.gsi_score)
 
-        # Auto-register V2G-capable vehicles during stress
+        # Auto-register and trigger V2G-capable vehicles during stress
         if self.level.v2g_enabled:
             for vid, sess in list(self.slot_allocator.active_sessions.items()):
                 ev = sess.get("ev")
                 if ev and ev.is_v2g_capable and ev.soc_percent >= 62:
-                    self.v2g_manager.register_v2g_vehicle(
-                        vid, ev.soc_percent, ev.departure_time
-                    )
+                    # Register if not already in participants
+                    if vid not in self.v2g_manager.participants:
+                        self.v2g_manager.register_v2g_vehicle(
+                            vid, ev.soc_percent, ev.departure_time
+                        )
+                    
+                    # Trigger discharge if GSI is Red (> 75)
+                    if self.level.gsi_score > 75:
+                        if vid not in self.v2g_manager.active_discharge_sessions:
+                            # Estimate deficit based on load overflow (simplified)
+                            deficit = max(20.0, (self.metrics.load_percentage - 80) * 10)
+                            self.v2g_manager.request_v2g_discharge(vid, self.level.gsi_score, deficit)
+                        
+                        # Live compensation: add small amount per tick based on discharge power
+                        # (simplified: 10kW * 3s / 3600 = 0.0083 kWh; 0.0083 * 2.5 = 0.02 INR)
+                        power = self.v2g_manager.active_discharge_sessions.get(vid, 0.0)
+                        kwh_this_tick = (power * _BASE_TICK_SECONDS / 3600.0) * self._speed_multiplier
+                        self.v2g_manager.add_compensation(kwh_this_tick * self.v2g_manager.DISCHARGE_RATE_PER_KWH)
+        
+        # Stop V2G discharge if stress subsides
+        if self.level.gsi_score <= 75:
+            for vid in list(self.v2g_manager.active_discharge_sessions.keys()):
+                # For demo, we just stop it and pay out (discharged 0.5 kWh per tick approx)
+                self.v2g_manager.stop_v2g_discharge(vid, discharged_kwh=0.5)
 
-        # Periodic departure processing
+        # Periodic departure and queue processing
         if self._tick % 4 == 0:
-            self.slot_allocator.process_departures()
+            self.slot_allocator.process_departures(self.level.gsi_score)
+        elif len(self.slot_allocator.active_sessions) < self.slot_allocator.num_slots:
+            # Try to fill slots from queue even if no departures this tick
+            self.slot_allocator.process_queue(self.level.gsi_score)
 
     def _advance_scenario(self):
         transitions = {
