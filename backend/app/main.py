@@ -18,11 +18,13 @@ async def lifespan(app: FastAPI):
     print("[*] GridCharge API starting — launching background simulators...")
     grid_task = asyncio.create_task(simulator.run(),        name="grid_sim")
     ev_task   = asyncio.create_task(simulator.run_auto_ev(), name="ev_sim")
+    external_task = asyncio.create_task(simulator.run_external_feed(), name="external_feed")
     yield
     grid_task.cancel()
     ev_task.cancel()
+    external_task.cancel()
     try:
-        await asyncio.gather(grid_task, ev_task, return_exceptions=True)
+        await asyncio.gather(grid_task, ev_task, external_task, return_exceptions=True)
     except Exception:
         pass
     print("[*] GridCharge API shutdown")

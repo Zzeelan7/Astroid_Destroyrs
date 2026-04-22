@@ -1,5 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
+import * as THREE from 'three';
+import {
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -122,6 +132,88 @@ function Bar({ value, max = 100, label }) {
   );
 }
 
+function ThreeGridScene({ intensity = 0.4 }) {
+  const mountRef = useRef(null);
+
+  useEffect(() => {
+    if (!mountRef.current) return undefined;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#030303');
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+    camera.position.z = 4.5;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    mountRef.current.appendChild(renderer.domElement);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.35 + intensity * 0.5);
+    scene.add(ambient);
+
+    const point = new THREE.PointLight(0xffffff, 1.8, 100);
+    point.position.set(3, 3, 4);
+    scene.add(point);
+
+    const core = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(1.0, 1),
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color(`hsl(${Math.max(0, 120 - intensity * 120)}, 70%, 60%)`),
+        metalness: 0.4,
+        roughness: 0.3,
+      }),
+    );
+    scene.add(core);
+
+    const wire = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(1.35, 2),
+      new THREE.MeshBasicMaterial({
+        color: 0x9a9a9a,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.55,
+      }),
+    );
+    scene.add(wire);
+
+    const grid = new THREE.GridHelper(8, 20, 0x444444, 0x202020);
+    grid.position.y = -1.7;
+    scene.add(grid);
+
+    const resize = () => {
+      if (!mountRef.current) return;
+      const w = mountRef.current.clientWidth;
+      const h = mountRef.current.clientHeight;
+      renderer.setSize(w, h);
+      camera.aspect = w / Math.max(h, 1);
+      camera.updateProjectionMatrix();
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    let frameId;
+    const animate = () => {
+      frameId = requestAnimationFrame(animate);
+      core.rotation.x += 0.004 + intensity * 0.002;
+      core.rotation.y += 0.006 + intensity * 0.002;
+      wire.rotation.y -= 0.002;
+      wire.rotation.x += 0.001;
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', resize);
+      renderer.dispose();
+      if (mountRef.current?.contains(renderer.domElement)) {
+        mountRef.current.removeChild(renderer.domElement);
+      }
+    };
+  }, [intensity]);
+
+  return <div className="three-wrap" ref={mountRef} />;
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [gridStatus, setGridStatus] = useState(null);
@@ -133,6 +225,10 @@ export default function App() {
   const [log,     setLog]     = useState([]);
   const [healthy, setHealthy] = useState(null);
   const [busy,    setBusy]    = useState(false);   // button debounce
+  const [history, setHistory] = useState([]);
+  const [externalSignals, setExternalSignals] = useState({
+    online: false, temperature_c: null, wind_speed_kmh: null, cloud_cover_pct: null, updated_at: null,
+  });
   const logRef = useRef([]);
   const prevGsi = useRef(null);
 
@@ -193,6 +289,20 @@ export default function App() {
     } catch {}
   }, []);
 
+  const fetchHistory = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/grid/history?limit=80`, { timeout: 5000 });
+      setHistory(res.data.points || []);
+    } catch {}
+  }, []);
+
+  const fetchExternalSignals = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/grid/external-signals`, { timeout: 5000 });
+      setExternalSignals(res.data);
+    } catch {}
+  }, []);
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -200,6 +310,8 @@ export default function App() {
     fetchGrid();
     fetchSessions();
     fetchV2G();
+    fetchHistory();
+    fetchExternalSignals();
     addLog('GridCharge dashboard connected', 'info');
     addLog(`API endpoint: ${API_URL}`, 'info');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -210,10 +322,12 @@ export default function App() {
       fetchGrid();
       fetchSessions();
       fetchV2G();
+      fetchHistory();
+      fetchExternalSignals();
     }, 3000);
     const h = setInterval(fetchHealth, 15000);
     return () => { clearInterval(t); clearInterval(h); };
-  }, [fetchGrid, fetchSessions, fetchV2G, fetchHealth]);
+  }, [fetchGrid, fetchSessions, fetchV2G, fetchHealth, fetchHistory, fetchExternalSignals]);
 
   // ── User actions ──────────────────────────────────────────────────────────
 
@@ -266,6 +380,48 @@ export default function App() {
     setBusy(false);
   };
 
+  const simulateFailure = async () => {
+    if (busy) return;
+    setBusy(true);
+    addLog('🚨 Injecting transformer failure event...', 'critical');
+    try {
+      const res = await axios.post(`${API_URL}/api/grid/inject-failure`, {}, { timeout: 5000 });
+      setGridStatus(res.data);
+      prevGsi.current = res.data.gsi_score;
+      addLog(`FAILURE MODE ON — GSI ${res.data.gsi_score.toFixed(1)}`, 'critical');
+      fetchSessions();
+    } catch {
+      addLog('Failure inject failed — backend offline?', 'error');
+    }
+    setBusy(false);
+  };
+
+  const clearFailure = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await axios.post(`${API_URL}/api/grid/clear-failure`, {}, { timeout: 5000 });
+      addLog('✅ Transformer failure cleared', 'info');
+      fetchGrid();
+    } catch {
+      addLog('Clear failure request failed', 'error');
+    }
+    setBusy(false);
+  };
+
+  const setSimulationState = async (payload, label) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await axios.post(`${API_URL}/api/grid/simulation-control`, payload, { timeout: 5000 });
+      addLog(`Simulation updated: ${label} (speed ${res.data.speed_multiplier}x)`, 'info');
+      fetchGrid();
+    } catch {
+      addLog('Simulation control failed', 'error');
+    }
+    setBusy(false);
+  };
+
   // ── Derived display values ────────────────────────────────────────────────
 
   const gsi  = gridStatus?.gsi_score ?? 0;
@@ -276,6 +432,13 @@ export default function App() {
     :             { label: '🔴 RED',    cls: 'tier-red'    };
 
   const scenarioLabel = SCENARIO_LABELS[gridStatus?.scenario] ?? '—';
+  const chartData = history.map((p) => ({
+    t: p.timestamp ? p.timestamp.slice(11, 19) : '--:--:--',
+    gsi: p.gsi_score,
+    load: p.load_percentage,
+    ren: p.renewable_penetration_pct,
+  }));
+  const stressIntensity = Math.min(1, gsi / 100);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -369,6 +532,18 @@ export default function App() {
               sub="discharging"
               accent
             />
+            <StatCard
+              label="CARBON SAVED"
+              value={(gridStatus?.carbon_saved_kg ?? 0).toFixed(1)}
+              unit="kg"
+              sub="renewable offset"
+            />
+            <StatCard
+              label="GRID MODE"
+              value={gridStatus?.fault_active ? 'FAULT' : 'NORMAL'}
+              sub={`sim ${gridStatus?.speed_multiplier?.toFixed?.(1) ?? '1.0'}x`}
+              accent={Boolean(gridStatus?.fault_active)}
+            />
           </div>
 
           <div className="panel panel-sessions">
@@ -413,11 +588,67 @@ export default function App() {
                 ⚡ INJECT STRESS EVENT
               </button>
             </div>
+            <div className="action-row">
+              <button className="btn btn-danger" onClick={simulateFailure} disabled={busy}>
+                🚨 TRANSFORMER FAILURE
+              </button>
+              <button className="btn btn-primary" onClick={clearFailure} disabled={busy}>
+                ✅ CLEAR FAILURE
+              </button>
+            </div>
+            <div className="action-row action-row--small">
+              <button className="btn btn-primary" onClick={() => setSimulationState({ paused: true }, 'paused')} disabled={busy}>
+                PAUSE
+              </button>
+              <button className="btn btn-primary" onClick={() => setSimulationState({ paused: false }, 'resumed')} disabled={busy}>
+                RESUME
+              </button>
+              <button className="btn btn-primary" onClick={() => setSimulationState({ speed_multiplier: 2.0 }, '2x speed')} disabled={busy}>
+                2X
+              </button>
+              <button className="btn btn-primary" onClick={() => setSimulationState({ speed_multiplier: 1.0 }, '1x speed')} disabled={busy}>
+                1X
+              </button>
+            </div>
+            <div className="external-strip">
+              <span>EXT SIGNAL: {externalSignals.online ? 'LIVE' : 'OFFLINE'}</span>
+              <span>TEMP {externalSignals.temperature_c ?? '--'}°C</span>
+              <span>WIND {externalSignals.wind_speed_kmh ?? '--'} km/h</span>
+              <span>CLOUD {externalSignals.cloud_cover_pct ?? '--'}%</span>
+            </div>
+          </div>
+
+          <div className="panel panel-history">
+            <div className="panel-header">
+              <span className="panel-title">GRID STRESS HISTORY (REAL-TIME)</span>
+              <span className="panel-count">{history.length} POINTS</span>
+            </div>
+            <div className="history-chart">
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={chartData}>
+                  <CartesianGrid stroke="#1f1f1f" />
+                  <XAxis dataKey="t" tick={{ fill: '#777', fontSize: 10 }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fill: '#777', fontSize: 10 }} domain={[0, 100]} />
+                  <Tooltip contentStyle={{ background: '#080808', border: '1px solid #262626', color: '#ddd' }} />
+                  <Line type="monotone" dataKey="gsi" stroke="#ffffff" strokeWidth={2} dot={false} name="GSI" />
+                  <Line type="monotone" dataKey="load" stroke="#777777" strokeWidth={1.5} dot={false} name="Load %" />
+                  <Line type="monotone" dataKey="ren" stroke="#aaaaaa" strokeWidth={1.5} dot={false} name="Renew %" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </section>
 
         {/* ── Column 3 — V2G + Tiers + Log ── */}
         <section className="col-right">
+          <div className="panel panel-3d">
+            <div className="panel-header">
+              <span className="panel-title">3D GRID CORE</span>
+              <span className="panel-count">LIVE VISUAL</span>
+            </div>
+            <ThreeGridScene intensity={stressIntensity} />
+          </div>
+
           <div className="panel panel-v2g">
             <div className="panel-header">
               <span className="panel-title">V2G PROGRAM STATUS</span>
