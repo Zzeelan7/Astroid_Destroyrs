@@ -156,7 +156,21 @@ class GridSimulator:
             transformer_temp_pct=    max(12, min(98, temp)),
             renewable_penetration_pct=max(3,  min(95, ren)),
         )
+        old_level = getattr(self, "level", None)
         self.level = self.gsi_engine.compute_gsi(self.metrics)
+        
+        if old_level and old_level.status != self.level.status:
+            try:
+                from .api.ws import manager
+                asyncio.create_task(manager.broadcast({
+                    "type": "GSI_THRESHOLD_CROSSED",
+                    "old_status": old_level.status,
+                    "new_status": self.level.status,
+                    "gsi_score": self.level.gsi_score
+                }))
+            except ImportError:
+                pass
+                
         self._update_carbon_saved()
         self._record_history_point()
 
@@ -164,10 +178,10 @@ class GridSimulator:
         self.slot_allocator.rebalance_power(self.level.gsi_score)
 
         # Auto-register and trigger V2G-capable vehicles during stress
-        if self.level.v2g_enabled:
+        if self.level.v2g_enabled or self.level.gsi_score > 75:
             for vid, sess in list(self.slot_allocator.active_sessions.items()):
                 ev = sess.get("ev")
-                if ev and ev.is_v2g_capable and ev.soc_percent >= 62:
+                if ev and ev.is_v2g_capable and ev.soc_percent >= 30:
                     # Register if not already in participants
                     if vid not in self.v2g_manager.participants:
                         self.v2g_manager.register_v2g_vehicle(
@@ -185,10 +199,23 @@ class GridSimulator:
                         # (simplified: 10kW * 3s / 3600 = 0.0083 kWh; 0.0083 * 2.5 = 0.02 INR)
                         power = self.v2g_manager.active_discharge_sessions.get(vid, 0.0)
                         kwh_this_tick = (power * _BASE_TICK_SECONDS / 3600.0) * self._speed_multiplier
-                        self.v2g_manager.add_compensation(kwh_this_tick * self.v2g_manager.DISCHARGE_RATE_PER_KWH)
+                        self.v2g_manager.add_compensation(vid, kwh_this_tick * self.v2g_manager.DISCHARGE_RATE_PER_KWH)
+                        
+                        try:
+                            from .api.ws import manager
+                            participant = self.v2g_manager.participants[vid]
+                            asyncio.create_task(manager.broadcast({
+                                "type": "V2G_EARNINGS_UPDATE",
+                                "session_id": vid,
+                                "energy_discharged_kwh": participant.compensation_earned_inr / self.v2g_manager.DISCHARGE_RATE_PER_KWH,
+                                "compensation_inr": participant.compensation_earned_inr,
+                                "total_paid": self.v2g_manager.total_compensation_paid
+                            }))
+                        except ImportError:
+                            pass
         
         # Stop V2G discharge if stress subsides
-        if self.level.gsi_score <= 75:
+        if self.level.gsi_score < 60:
             for vid in list(self.v2g_manager.active_discharge_sessions.keys()):
                 # For demo, we just stop it and pay out (discharged 0.5 kWh per tick approx)
                 self.v2g_manager.stop_v2g_discharge(vid, discharged_kwh=0.5)
@@ -199,6 +226,30 @@ class GridSimulator:
         elif len(self.slot_allocator.active_sessions) < self.slot_allocator.num_slots:
             # Try to fill slots from queue even if no departures this tick
             self.slot_allocator.process_queue(self.level.gsi_score)
+
+        self._flush_db()
+
+    def _flush_db(self):
+        from .db.database import SessionLocal
+        from .db.models import V2GSession
+        
+        db = SessionLocal()
+        try:
+            # Upsert V2G sessions
+            for vid, participant in self.v2g_manager.participants.items():
+                db_session = db.query(V2GSession).filter(V2GSession.vehicle_id == vid).first()
+                if not db_session:
+                    db_session = V2GSession(id=f"{vid}-v2g", vehicle_id=vid)
+                    db.add(db_session)
+                
+                db_session.status = participant.status
+                db_session.compensation_earned_inr = participant.compensation_earned_inr
+                
+            db.commit()
+        except Exception as e:
+            print(f"DB Flush Error: {e}")
+        finally:
+            db.close()
 
     def _advance_scenario(self):
         transitions = {

@@ -8,7 +8,7 @@ ENV REACT_APP_API_URL=${REACT_APP_API_URL}
 
 # Install dependencies
 COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm install --legacy-peer-deps
 
 # Copy source and build
 COPY public ./public

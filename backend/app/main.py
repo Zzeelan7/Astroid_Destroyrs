@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import health, charging, grid, v2g
+from .api import health, charging, grid, v2g, ws
 from .state import simulator
 
 
@@ -49,6 +49,7 @@ app.include_router(health.router,   prefix="/api/health",   tags=["health"])
 app.include_router(charging.router, prefix="/api/charging", tags=["charging"])
 app.include_router(grid.router,     prefix="/api/grid",     tags=["grid"])
 app.include_router(v2g.router,      prefix="/api/v2g",      tags=["v2g"])
+app.include_router(ws.router,       prefix="/api",          tags=["ws"])
 
 
 @app.get("/")

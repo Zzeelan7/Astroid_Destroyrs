@@ -14,6 +14,43 @@ A complete smart charging system designed to stabilize the power grid while meet
 - ✅ **3D Interactive Dashboard**: Live visual feedback of the grid "core" and charging sessions.
 - ✅ **Stateful Simulator**: Built-in background simulation of EV fleets and grid scenarios.
 
+## System Architecture
+
+GridCharge uses an event-driven microservices architecture:
+
+1. **Frontend (React)**: High-performance 3D dashboard rendering real-time grid telemetry.
+2. **Backend API (FastAPI)**: Handles simulation orchestration, V2G compensation, and state management.
+3. **MQTT Broker**: Subscribes to mock smart meter telemetry and simulated transformer sensor feeds.
+4. **Redis Cache**: Rapid lookup for session slot availability.
+5. **PostgreSQL Database**: Persistent storage for V2G compensation and billing metrics.
+
+## Hackathon Demo Walkthrough
+
+Follow these steps to demonstrate the GridCharge platform:
+
+1. **Start the Environment**: 
+   ```bash
+   docker-compose up -d --build
+   ```
+2. **Seed Initial Data**: 
+   ```bash
+   python scripts/seed_demo_data.py
+   ```
+   *This populates 10 EVs into the system to showcase slot allocation and queueing.*
+3. **Open Dashboard**: Navigate to `http://localhost:3000`
+4. **Onboarding**: Click through the onboarding tooltips to explain the UI components to judges.
+5. **Trigger Morning Peak**: Select `Morning Peak Rush` from the Scenario Simulator dropdown. Watch how charging power is throttled down from 150kW to lower tiers as GSI increases.
+6. **Trigger Transformer Failure**: Select `Transformer Failure`. Notice the GSI spiking into the RED zone (>75).
+   - V2G-capable cars will automatically enter `DISCHARGING` mode.
+   - The UI will flash notifications.
+   - The **Live Earnings** widget will start incrementing rapidly as vehicles push power back to the grid.
+7. **Emergency Escalation (P0)**: While in high stress, click the `🚨 P0` button on any slot card. The system will forcefully rebalance power to prioritize the emergency vehicle.
+8. **Clear Stress**: Select `Solar Glut`. Watch the GSI recover (drop below 50) and observe the `POWER_RAMP` websocket notifications as vehicles are restored to 100% charging capacity.
+9. **View History & Export**: Navigate to the `HISTORY` tab, demonstrate the data recording, and export the CSV to show audit compliance.
+10. **Admin Overrides**: Show the `ADMIN` tab and manually override GSI stress if needed.
+
+## Future Roadmap
+
 ---
 
 ## 🏗️ Project Architecture
