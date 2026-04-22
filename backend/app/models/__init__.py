@@ -26,6 +26,10 @@ class GridStatusResponse(BaseModel):
     transformer_temp_pct: Optional[float] = None
     renewable_penetration_pct: Optional[float] = None
     scenario: Optional[str] = None
+    fault_active: Optional[bool] = None
+    speed_multiplier: Optional[float] = None
+    paused: Optional[bool] = None
+    carbon_saved_kg: Optional[float] = None
 
 
 class ChargingRequestRequest(BaseModel):

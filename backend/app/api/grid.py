@@ -1,10 +1,15 @@
 """Grid monitoring endpoints"""
 from fastapi import APIRouter
+from pydantic import BaseModel, Field
 
 from ..models import GridMetricsRequest, GridStatusResponse
 from ..state import simulator
 
 router = APIRouter()
+
+class SimulationControlRequest(BaseModel):
+    paused: bool | None = None
+    speed_multiplier: float | None = Field(default=None, ge=0.5, le=4.0)
 
 
 @router.get("/status", response_model=GridStatusResponse)
@@ -47,11 +52,45 @@ async def inject_stress_event():
     return {"injected": True, **simulator.get_status()}
 
 
+@router.post("/inject-failure")
+async def inject_transformer_failure():
+    """Force transformer outage simulation for extreme emergency demo."""
+    simulator.inject_transformer_failure()
+    return {"injected": True, "event": "transformer_failure", **simulator.get_status()}
+
+
+@router.post("/clear-failure")
+async def clear_transformer_failure():
+    """Clear transformer outage mode and resume normal scenario transitions."""
+    simulator.clear_transformer_failure()
+    return {"cleared": True, **simulator.get_status()}
+
+
 @router.get("/forecast")
 async def forecast_grid_stress(hours_ahead: int = 24):
-    """Placeholder for LSTM-based GSI prediction."""
+    """Lightweight real-time forecast using moving-average + trend."""
+    return simulator.get_forecast(hours_ahead=hours_ahead)
+
+
+@router.get("/history")
+async def get_grid_history(limit: int = 120):
+    """Return recent time-series points for dashboard analytics charts."""
     return {
-        "forecast_hours": hours_ahead,
-        "status": "prediction_not_yet_available",
-        "message": "LSTM model integration pending",
+        "points": simulator.get_history(limit=limit),
+        "count": min(max(limit, 0), 360),
     }
+
+
+@router.get("/external-signals")
+async def get_external_signals():
+    """Return latest real-time external telemetry used by simulator."""
+    return simulator.get_external_signals()
+
+
+@router.post("/simulation-control")
+async def simulation_control(request: SimulationControlRequest):
+    """Pause/resume simulation or change speed multiplier."""
+    return simulator.set_simulation_state(
+        paused=request.paused,
+        speed_multiplier=request.speed_multiplier,
+    )
