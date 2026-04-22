@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Global application state and background grid simulator.
 Single source of truth for grid metrics, slot allocator, and V2G manager.
@@ -7,6 +9,7 @@ import math
 import random
 from collections import deque
 from datetime import datetime, timedelta
+from typing import Optional
 
 import httpx
 
@@ -361,7 +364,7 @@ class GridSimulator:
     def get_external_signals(self) -> dict:
         return dict(self._external_signals)
 
-    def set_simulation_state(self, paused: bool | None = None, speed_multiplier: float | None = None) -> dict:
+    def set_simulation_state(self, paused: Optional[bool] = None, speed_multiplier: Optional[float] = None) -> dict:
         if paused is not None:
             self._paused = paused
         if speed_multiplier is not None:

@@ -10,6 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import VehicleSimulatorPanel from './VehicleSimulatorPanel';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -574,6 +575,16 @@ export default function App() {
               )}
             </div>
           </div>
+
+          <VehicleSimulatorPanel
+            onSimulationComplete={(data) => {
+              addLog(
+                `${data.vehicle_id} → ${data.slot_status.toUpperCase()} @ ${Number(data.allocated_power_kw).toFixed(1)} kW`,
+                data.slot_status === 'queued' ? 'warn' : 'info',
+              );
+              fetchSessions();
+            }}
+          />
 
           <div className="panel panel-actions">
             <div className="panel-header">

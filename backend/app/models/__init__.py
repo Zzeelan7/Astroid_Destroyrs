@@ -42,6 +42,24 @@ class ChargingRequestRequest(BaseModel):
     is_v2g_capable: bool = False
 
 
+class SimulationLocation(BaseModel):
+    """Vehicle location payload for simulation."""
+    lat: float
+    lng: float
+    name: str
+
+
+class SimulationRequest(BaseModel):
+    """Manual EV simulation request."""
+    vehicle_id: str
+    soc_percent: float = Field(..., ge=0, le=100)
+    target_soc_percent: float = Field(..., ge=0, le=100)
+    departure_time: datetime
+    user_priority: int = Field(..., ge=0, le=5)
+    is_v2g_capable: bool = False
+    location: SimulationLocation
+
+
 class SlotAllocationResponse(BaseModel):
     """Slot allocation result"""
     vehicle_id: str
@@ -51,6 +69,18 @@ class SlotAllocationResponse(BaseModel):
     estimated_wait_minutes: int
     estimated_charge_time_minutes: int
     reason: str
+
+
+class SimulationResponse(SlotAllocationResponse):
+    """Simulation prediction payload with allocation details."""
+    allocated_power_kw: float
+    estimated_cost_inr: float
+    carbon_offset_kg: float
+    gsi_at_request: float
+    recommendation: str
+    optimal_start_window: datetime
+    slot_status: str
+    location: SimulationLocation
 
 
 class V2GOfferRequest(BaseModel):
