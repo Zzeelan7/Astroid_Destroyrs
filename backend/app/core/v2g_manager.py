@@ -68,7 +68,7 @@ class V2GManager:
         # Determine discharge power
         discharge_power = min(
             self.MAX_DISCHARGE_PER_VEHICLE,
-            grid_deficit_kw / max(1, len([p for p in self.participants if p != participant]))
+            grid_deficit_kw / max(1, len([p for p in self.participants if p != vehicle_id]))
         )
         
         if discharge_power <= 0.5:  # Minimum viable discharge
@@ -89,7 +89,7 @@ class V2GManager:
                           actual_discharged_kwh: float) -> float:
         """Stop discharge and calculate compensation"""
         if vehicle_id in self.active_discharge_sessions:
-            del self.active_discharge_sessions[vehicle_id]
+            self.active_discharge_sessions.pop(vehicle_id, None)
         
         if vehicle_id in self.participants:
             participant = self.participants[vehicle_id]

@@ -1,9 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Bebas+Neue&family=Inter:wght@300;400;500&display=swap');
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /* ── Variables ──────────────────────────────────────────────── */
 :root {
   --bg:       #000000;
@@ -425,7 +421,6 @@ button { cursor: pointer; }
 }
 
 /* ── Actions Panel ──────────────────────────────────────────── */
-.panel-actions {}
 
 .action-row {
   display: flex;
@@ -563,7 +558,6 @@ button { cursor: pointer; }
 }
 
 /* ── Log Panel ──────────────────────────────────────────────── */
-.panel-log {}
 
 .log-body {
   max-height: 240px;

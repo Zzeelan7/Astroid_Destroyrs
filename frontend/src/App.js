@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 
+// In Docker the frontend container calls the API via the host machine's port 8000
+// In local dev it's also localhost:8000
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 // ─── Utility ────────────────────────────────────────────────────────────────
-const cx = (...classes) => classes.filter(Boolean).join(' ');
-
 const pad = (n) => String(n).padStart(2, '0');
 const ts = () => {
   const d = new Date();
@@ -20,17 +20,15 @@ function GSIGauge({ score }) {
   const gap = circ - dash;
 
   const tier =
-    score <= 30 ? { label: 'LOW STRESS', sym: '●' }
-    : score <= 55 ? { label: 'MODERATE', sym: '◐' }
-    : score <= 75 ? { label: 'HIGH STRESS', sym: '◕' }
-    : { label: 'CRITICAL', sym: '⊗' };
+    score <= 30 ? { label: 'LOW STRESS' }
+    : score <= 55 ? { label: 'MODERATE' }
+    : score <= 75 ? { label: 'HIGH STRESS' }
+    : { label: 'CRITICAL' };
 
   return (
     <div className="gauge-wrapper">
       <svg width="200" height="200" viewBox="0 0 200 200">
-        {/* Track */}
         <circle cx="100" cy="100" r={r} fill="none" stroke="#1a1a1a" strokeWidth="12" />
-        {/* Tick marks */}
         {[0, 25, 50, 75, 100].map((v) => {
           const angle = (v / 100) * 360 - 90;
           const rad = (angle * Math.PI) / 180;
@@ -40,7 +38,6 @@ function GSIGauge({ score }) {
           const y2 = 100 + (r + 5) * Math.sin(rad);
           return <line key={v} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#333" strokeWidth="1.5" />;
         })}
-        {/* Progress arc */}
         <circle
           cx="100" cy="100" r={r}
           fill="none"
@@ -51,7 +48,6 @@ function GSIGauge({ score }) {
           strokeLinecap="butt"
           style={{ transition: 'stroke-dasharray 0.8s cubic-bezier(0.4,0,0.2,1)' }}
         />
-        {/* Score text */}
         <text x="100" y="92" textAnchor="middle" fill="white" fontSize="38" fontFamily="'IBM Plex Mono', monospace" fontWeight="700">
           {score.toFixed(0)}
         </text>
@@ -66,10 +62,9 @@ function GSIGauge({ score }) {
   );
 }
 
-// ─── Stat Card ───────────────────────────────────────────────────────────────
 function StatCard({ label, value, unit, sub, accent }) {
   return (
-    <div className={cx('stat-card', accent && 'stat-card--accent')}>
+    <div className={['stat-card', accent ? 'stat-card--accent' : ''].filter(Boolean).join(' ')}>
       <div className="stat-label">{label}</div>
       <div className="stat-value">
         {value}
@@ -80,17 +75,15 @@ function StatCard({ label, value, unit, sub, accent }) {
   );
 }
 
-// ─── Log Entry ───────────────────────────────────────────────────────────────
 function LogEntry({ time, msg, type }) {
   return (
-    <div className={cx('log-entry', `log-entry--${type}`)}>
+    <div className={`log-entry log-entry--${type}`}>
       <span className="log-time">{time}</span>
       <span className="log-msg">{msg}</span>
     </div>
   );
 }
 
-// ─── Session Row ─────────────────────────────────────────────────────────────
 function SessionRow({ id, power, time, index }) {
   return (
     <div className="session-row" style={{ animationDelay: `${index * 60}ms` }}>
@@ -102,7 +95,6 @@ function SessionRow({ id, power, time, index }) {
   );
 }
 
-// ─── Progress Bar ────────────────────────────────────────────────────────────
 function Bar({ value, max = 100, label }) {
   const pct = Math.min(100, (value / max) * 100);
   return (
@@ -118,7 +110,6 @@ function Bar({ value, max = 100, label }) {
   );
 }
 
-// ─── Main App ────────────────────────────────────────────────────────────────
 export default function App() {
   const [gridStatus, setGridStatus] = useState(null);
   const [sessions, setSessions] = useState({ total_active: 0, queued: 0, sessions: [] });
@@ -136,7 +127,7 @@ export default function App() {
 
   const fetchHealth = useCallback(async () => {
     try {
-      await axios.get(`${API_URL}/api/health/`);
+      await axios.get(`${API_URL}/api/health/`, { timeout: 5000 });
       setHealthy(true);
     } catch {
       setHealthy(false);
@@ -155,7 +146,7 @@ export default function App() {
         frequency_hz: freq,
         transformer_temp_pct: temp,
         renewable_penetration_pct: ren,
-      });
+      }, { timeout: 5000 });
 
       const prev = gridStatus?.gsi_score;
       setGridStatus({ ...res.data, load, freq, temp, ren });
@@ -170,20 +161,20 @@ export default function App() {
         }
       }
     } catch (e) {
-      addLog('Grid API unreachable', 'error');
+      addLog('Grid API unreachable — check backend is running', 'error');
     }
   }, [gridStatus, addLog]);
 
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/charging/active-sessions`);
+      const res = await axios.get(`${API_URL}/api/charging/active-sessions`, { timeout: 5000 });
       setSessions(res.data);
     } catch {}
   }, []);
 
   const fetchV2G = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/v2g/status`);
+      const res = await axios.get(`${API_URL}/api/v2g/status`, { timeout: 5000 });
       setV2g(res.data);
     } catch {}
   }, []);
@@ -194,7 +185,8 @@ export default function App() {
     fetchSessions();
     fetchV2G();
     addLog('GridCharge dashboard initialized', 'info');
-    addLog('Connecting to API...', 'info');
+    addLog(`Connecting to API at ${API_URL}...`, 'info');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -211,10 +203,10 @@ export default function App() {
   const gsi = gridStatus?.gsi_score ?? 0;
 
   const tier =
-    gsi <= 30 ? { label: '🟢 GREEN', cls: 'tier-green', short: 'G' }
-    : gsi <= 55 ? { label: '🟡 YELLOW', cls: 'tier-yellow', short: 'Y' }
-    : gsi <= 75 ? { label: '🟠 ORANGE', cls: 'tier-orange', short: 'O' }
-    : { label: '🔴 RED', cls: 'tier-red', short: 'R' };
+    gsi <= 30 ? { label: '🟢 GREEN', cls: 'tier-green' }
+    : gsi <= 55 ? { label: '🟡 YELLOW', cls: 'tier-yellow' }
+    : gsi <= 75 ? { label: '🟠 ORANGE', cls: 'tier-orange' }
+    : { label: '🔴 RED', cls: 'tier-red' };
 
   const simulateEV = async () => {
     const id = `EV-${String(Math.floor(Math.random() * 9000) + 1000)}`;
@@ -248,16 +240,14 @@ export default function App() {
       setGridStatus(s => ({ ...s, ...res.data }));
       addLog(`STRESS EVENT: GSI ${res.data.gsi_score.toFixed(1)} — V2G ${res.data.v2g_enabled ? 'ACTIVE' : 'INACTIVE'}`, 'critical');
     } catch {
-      addLog('Stress inject failed', 'error');
+      addLog('Stress inject failed — backend offline?', 'error');
     }
   };
 
   return (
     <div className="app">
-      {/* Scanline overlay */}
       <div className="scanlines" />
 
-      {/* Header */}
       <header className="header">
         <div className="header-left">
           <div className="logo">
@@ -267,34 +257,32 @@ export default function App() {
           <div className="header-sub">Grid Stress-Aware EV Charging System</div>
         </div>
         <div className="header-right">
-          <div className={cx('status-pill', healthy ? 'pill-ok' : 'pill-err')}>
+          <div className={`status-pill ${healthy ? 'pill-ok' : healthy === false ? 'pill-err' : 'pill-ok'}`}>
             <span className="pill-dot" />
-            {healthy ? 'API ONLINE' : 'API OFFLINE'}
+            {healthy === null ? 'CONNECTING...' : healthy ? 'API ONLINE' : 'API OFFLINE'}
           </div>
           <div className="clock">{ts()}</div>
         </div>
       </header>
 
-      {/* Main Grid */}
       <main className="main">
-
         {/* Column 1 — GSI */}
         <section className="panel panel-gsi">
           <div className="panel-header">
             <span className="panel-title">GRID STRESS INDEX</span>
-            <span className={cx('tier-badge', tier.cls)}>{tier.label}</span>
+            <span className={`tier-badge ${tier.cls}`}>{tier.label}</span>
           </div>
           <div className="gsi-center">
             <GSIGauge score={gsi} />
           </div>
           <div className="gsi-policy">
             <div className="policy-label">ACTIVE POLICY</div>
-            <div className="policy-text">{gridStatus?.charging_policy ?? '—'}</div>
+            <div className="policy-text">{gridStatus?.charging_policy ?? 'Waiting for data...'}</div>
           </div>
           <div className="gsi-bars">
             <Bar value={gridStatus?.load ?? 0} label="LOAD %" />
             <Bar value={gridStatus?.ren ?? 0} label="RENEWABLE %" />
-            <Bar value={gridStatus?.temp ?? 0} label="TRANSFORMER °C EQUIV" />
+            <Bar value={gridStatus?.temp ?? 0} label="TRANSFORMER TEMP %" />
           </div>
           <div className="gsi-meta">
             <div className="meta-item">
@@ -303,13 +291,13 @@ export default function App() {
             </div>
             <div className="meta-item">
               <span className="meta-k">NEW CONN.</span>
-              <span className={cx('meta-v', gridStatus?.allow_new_connections ? 'v-yes' : 'v-no')}>
+              <span className={`meta-v ${gridStatus?.allow_new_connections ? 'v-yes' : 'v-no'}`}>
                 {gridStatus?.allow_new_connections ? 'ALLOWED' : 'BLOCKED'}
               </span>
             </div>
             <div className="meta-item">
               <span className="meta-k">V2G MODE</span>
-              <span className={cx('meta-v', gridStatus?.v2g_enabled ? 'v-yes' : 'v-no')}>
+              <span className={`meta-v ${gridStatus?.v2g_enabled ? 'v-yes' : 'v-no'}`}>
                 {gridStatus?.v2g_enabled ? 'ACTIVE' : 'STANDBY'}
               </span>
             </div>
@@ -318,7 +306,6 @@ export default function App() {
 
         {/* Column 2 — Stats + Sessions */}
         <section className="col-mid">
-          {/* Stats */}
           <div className="stats-grid">
             <StatCard label="ACTIVE SESSIONS" value={sessions.total_active} sub="charging now" accent />
             <StatCard label="QUEUED" value={sessions.queued} sub="waiting" />
@@ -326,7 +313,6 @@ export default function App() {
             <StatCard label="V2G CAPACITY" value={v2g.current_v2g_capacity_kw.toFixed(1)} unit="kW" sub="discharging" accent />
           </div>
 
-          {/* Sessions table */}
           <div className="panel panel-sessions">
             <div className="panel-header">
               <span className="panel-title">ACTIVE CHARGING SESSIONS</span>
@@ -349,7 +335,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Actions */}
           <div className="panel panel-actions">
             <div className="panel-header">
               <span className="panel-title">SIMULATION CONTROLS</span>
@@ -367,11 +352,10 @@ export default function App() {
 
         {/* Column 3 — V2G + Log */}
         <section className="col-right">
-          {/* V2G Panel */}
           <div className="panel panel-v2g">
             <div className="panel-header">
               <span className="panel-title">V2G PROGRAM STATUS</span>
-              <span className={cx('live-badge', gridStatus?.v2g_enabled ? 'live-on' : 'live-off')}>
+              <span className={`live-badge ${gridStatus?.v2g_enabled ? 'live-on' : 'live-off'}`}>
                 {gridStatus?.v2g_enabled ? '● LIVE' : '○ STANDBY'}
               </span>
             </div>
@@ -399,19 +383,18 @@ export default function App() {
             </div>
           </div>
 
-          {/* Priority Tiers */}
           <div className="panel panel-tiers">
             <div className="panel-header">
               <span className="panel-title">PRIORITY TIERS</span>
             </div>
             <div className="tiers-list">
               {[
-                { p: 'P0', label: 'EMERGENCY', max: '∞', deferral: '0 min' },
-                { p: 'P1', label: 'CRITICAL BATTERY', max: '—', deferral: '5 min' },
-                { p: 'P2', label: 'FLEET / COMMERCIAL', max: '—', deferral: '15 min' },
-                { p: 'P3', label: 'PRE-BOOKED PUBLIC', max: '—', deferral: '20 min' },
-                { p: 'P4', label: 'WALK-IN', max: '—', deferral: '45 min' },
-                { p: 'P5', label: 'OPPORTUNISTIC', max: '—', deferral: '∞' },
+                { p: 'P0', label: 'EMERGENCY', deferral: '0 min' },
+                { p: 'P1', label: 'CRITICAL BATTERY', deferral: '5 min' },
+                { p: 'P2', label: 'FLEET / COMMERCIAL', deferral: '15 min' },
+                { p: 'P3', label: 'PRE-BOOKED PUBLIC', deferral: '20 min' },
+                { p: 'P4', label: 'WALK-IN', deferral: '45 min' },
+                { p: 'P5', label: 'OPPORTUNISTIC', deferral: '∞' },
               ].map(({ p, label, deferral }) => (
                 <div key={p} className="tier-row">
                   <span className="tier-p">{p}</span>
@@ -422,7 +405,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Event Log */}
           <div className="panel panel-log">
             <div className="panel-header">
               <span className="panel-title">EVENT LOG</span>
@@ -437,7 +419,6 @@ export default function App() {
         </section>
       </main>
 
-      {/* Footer */}
       <footer className="footer">
         <span>GRIDCHARGE v1.0 — HACKATHON MVP</span>
         <span className="footer-dot">◆</span>

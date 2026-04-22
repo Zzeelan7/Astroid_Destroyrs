@@ -7,23 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.api import health, charging, grid, v2g
-from app.core.gsi_engine import GSIEngine
-from app.core.slot_allocator import SlotAllocator
-from app.core.v2g_manager import V2GManager
-
-
-# Global state
-gsi_engine = GSIEngine()
-slot_allocator = SlotAllocator()
-v2g_manager = V2GManager()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown events"""
-    print("[*] GridCharge API starting...")
+    print("🚀 GridCharge API starting...")
     yield
-    print("[*] GridCharge API shutdown")
+    print("✅ GridCharge API shutdown")
 
 
 app = FastAPI(
@@ -33,7 +23,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS
+# CORS — allow all origins for dev/demo
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -51,13 +41,18 @@ app.include_router(v2g.router, prefix="/api/v2g", tags=["v2g"])
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
     return {
         "service": "GridCharge API",
         "version": "1.0.0",
         "status": "🟢 Online",
         "docs": "/docs"
     }
+
+
+@app.get("/health")
+async def health_simple():
+    """Simple health check for Docker healthcheck"""
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":

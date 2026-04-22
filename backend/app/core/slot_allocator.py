@@ -22,13 +22,13 @@ class PriorityTier(IntEnum):
     P5_OPPORTUNISTIC = 5  # SoC > 70%, no rush — fully flexible
 
 
-class ChargingLevel(IntEnum):
+class ChargingLevel:
     """Adaptive power throttling levels (kW)"""
-    FLOOR = 3  # 3.7 kW AC floor, never go below
-    LEVEL_1 = 3  # 3.7 kW standard
-    LEVEL_2 = 7  # 7.4 kW AC
-    LEVEL_3 = 22  # 22 kW 3-phase AC
-    LEVEL_4 = 50  # 50+ kW DC fast
+    FLOOR = 3.7    # 3.7 kW AC floor, never go below
+    LEVEL_1 = 3.7  # 3.7 kW standard
+    LEVEL_2 = 7.4  # 7.4 kW AC
+    LEVEL_3 = 22.0 # 22 kW 3-phase AC
+    LEVEL_4 = 150.0 # 150 kW DC fast
 
 
 @dataclass
@@ -47,7 +47,7 @@ class EVProfile:
 class SlotAllocation:
     """Result of slot assignment"""
     vehicle_id: str
-    slot_id: str
+    slot_id: Optional[str]
     status: str  # "assigned", "queued", "deferred", "v2g_offer"
     power_level_kw: float
     estimated_wait_minutes: int
@@ -242,7 +242,7 @@ class SlotAllocator:
             
             # If departure time reached or SoC >= target, free slot
             if time_remaining <= 0:
-                del self.active_sessions[vehicle_id]
+                self.active_sessions.pop(vehicle_id, None)
                 departed.append(vehicle_id)
         
         return departed
