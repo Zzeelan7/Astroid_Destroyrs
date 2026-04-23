@@ -233,10 +233,10 @@ class GridSimulator:
         from .db.database import SessionLocal
         from .db.models import V2GSession
         
-        db = SessionLocal()
-        try:
-            # Upsert V2G sessions
-            for vid, participant in self.v2g_manager.participants.items():
+        for vid, participant in list(self.v2g_manager.participants.items()):
+            db = SessionLocal()
+            try:
+                # Wrap each participant's DB write in its own try/except/commit block (BUG-B5)
                 db_session = db.query(V2GSession).filter(V2GSession.vehicle_id == vid).first()
                 if not db_session:
                     db_session = V2GSession(id=f"{vid}-v2g", vehicle_id=vid)
@@ -244,12 +244,12 @@ class GridSimulator:
                 
                 db_session.status = participant.status
                 db_session.compensation_earned_inr = participant.compensation_earned_inr
-                
-            db.commit()
-        except Exception as e:
-            print(f"DB Flush Error: {e}")
-        finally:
-            db.close()
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                print(f"DB Flush Error for vehicle {vid}: {e}")
+            finally:
+                db.close()
 
     def _advance_scenario(self):
         transitions = {

@@ -1,21 +1,23 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 export default function TransformerHeatmap({ gridStatus }) {
-  // Generate a mock 4x4 grid of transformers based on the global transformer temp
   const baseTemp = gridStatus?.transformer_temp_pct || 50;
   
-  const transformers = Array.from({ length: 16 }).map((_, i) => {
-    // Add some random noise to each transformer
-    let temp = baseTemp + (Math.sin(i * 1.5) * 10) + (Math.random() * 5);
-    temp = Math.max(0, Math.min(100, temp));
-    
-    let color = '#22c55e'; // green
-    if (temp > 85) color = '#ef4444'; // red
-    else if (temp > 65) color = '#eab308'; // yellow
-    else if (temp > 50) color = '#3b82f6'; // blue
-    
-    return { id: `TX-${100+i}`, temp, color };
-  });
+  // Fix BUG-F5: Stabilize heatmap with useMemo
+  const transformers = useMemo(() => {
+    return Array.from({ length: 16 }).map((_, i) => {
+      // Add deterministic noise based on index to prevent flickering
+      let temp = baseTemp + (Math.sin(i * 1.5) * 10);
+      temp = Math.max(0, Math.min(100, temp));
+      
+      let color = '#22c55e'; // green
+      if (temp > 85) color = '#ef4444'; // red
+      else if (temp > 65) color = '#eab308'; // yellow
+      else if (temp > 50) color = '#3b82f6'; // blue
+      
+      return { id: `TX-${100+i}`, temp, color };
+    });
+  }, [baseTemp]);
 
   return (
     <div className="panel panel-heatmap" style={{ marginTop: '1rem' }}>
@@ -32,7 +34,8 @@ export default function TransformerHeatmap({ gridStatus }) {
             color: '#fff',
             fontSize: '0.8rem',
             fontWeight: 'bold',
-            opacity: tx.temp / 100 + 0.2
+            opacity: tx.temp / 100 + 0.2,
+            transition: 'background 0.5s ease, opacity 0.5s ease'
           }}>
             {tx.id}
             <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>{tx.temp.toFixed(0)}%</div>

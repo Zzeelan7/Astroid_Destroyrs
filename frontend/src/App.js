@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import axios from 'axios';
 import * as THREE from 'three';
 import {
@@ -24,7 +24,25 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, '0');
-const ts = () => {
+
+// Fix BUG-F2: Create useClock hook
+function useClock() {
+  const [time, setTime] = useState('');
+  
+  useEffect(() => {
+    const update = () => {
+      const d = new Date();
+      setTime(`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`);
+    };
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, []);
+  
+  return time;
+}
+
+const getTimestamp = () => {
   const d = new Date();
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 };
@@ -108,21 +126,13 @@ function LogEntry({ time, msg, type }) {
 function SessionRow({ id, power, time, isV2g, index, onEscalate }) {
   return (
     <div className={`session-card ${isV2g ? 'v2g-active' : ''}`} style={{ animationDelay: `${index * 60}ms` }}>
-      <div className="session-card-header">
-        <span className="session-id">{id}</span>
-        {isV2g ? <span className="badge badge-v2g">⚡ DISCHARGING</span> : <span className="badge badge-charging">● CHARGING</span>}
-      </div>
-      <div className="session-card-body">
-        <div className="session-stat">
-          <span className="stat-val">{power.toFixed(1)}</span>
-          <span className="stat-unit">kW</span>
-        </div>
-        <div className="session-stat">
-          <span className="stat-val">{time}</span>
-          <span className="stat-unit">min</span>
-        </div>
-        <button className="btn btn-sm btn-danger" onClick={() => onEscalate(id)} title="Emergency Escalate (P0)">
-          🚨 P0
+      <span className="session-id">{id}</span>
+      <span className="session-power">{power.toFixed(1)} kW</span>
+      <span className="session-time">{time} min</span>
+      <div className="session-status-wrap">
+        {isV2g ? <span className="badge badge-v2g">⚡ V2G</span> : <span className="badge badge-charging">● CHG</span>}
+        <button className="btn btn-sm btn-danger btn-p0" onClick={() => onEscalate(id)} title="Escalate to P0">
+          P0
         </button>
       </div>
     </div>
@@ -229,6 +239,7 @@ function ThreeGridScene({ intensity = 0.4 }) {
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const wsData = useWebSocket();
+  const clock  = useClock();
   const [gridStatus, setGridStatus] = useState(null);
   const [sessions,   setSessions]   = useState({ total_active: 0, queued: 0, sessions: [] });
   const [v2g,        setV2g]        = useState({
@@ -244,9 +255,11 @@ export default function App() {
   });
   const logRef = useRef([]);
   const prevGsi = useRef(null);
+  // Fix BUG-F6: Track v2g_enabled with a ref
+  const prevV2gEnabled = useRef(false);
 
   const addLog = useCallback((msg, type = 'info') => {
-    const entry = { time: ts(), msg, type };
+    const entry = { time: getTimestamp(), msg, type };
     logRef.current = [entry, ...logRef.current].slice(0, 40);
     setLog([...logRef.current]);
   }, []);
@@ -277,16 +290,20 @@ export default function App() {
             d.gsi_score > 75 ? 'critical' : d.gsi_score > 55 ? 'warn' : 'info',
           );
         }
-        if (d.v2g_enabled && !gridStatus?.v2g_enabled) {
+        
+        // Fix BUG-F6: Use prevV2gEnabled ref
+        if (d.v2g_enabled && !prevV2gEnabled.current) {
           addLog('🔴 V2G DISCHARGE MODE ACTIVATED — critical grid stress', 'critical');
         }
       }
+      
       prevGsi.current = d.gsi_score;
+      prevV2gEnabled.current = d.v2g_enabled;
       setGridStatus(d);
     } catch {
       addLog('Grid API unreachable — is the backend running?', 'error');
     }
-  }, [addLog, gridStatus]);
+  }, [addLog]);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -424,7 +441,8 @@ export default function App() {
 
   const escalateP0 = async (vehicleId) => {
     try {
-      await axios.post(`${API_URL}/api/slots/escalate`, { vehicle_id: vehicleId });
+      // Fix BUG-B3: Correct endpoint path
+      await axios.post(`${API_URL}/api/charging/slots/escalate`, { vehicle_id: vehicleId });
       addLog(`Escalated ${vehicleId} to P0 Emergency`, 'critical');
       fetchSessions();
     } catch {
@@ -493,7 +511,7 @@ export default function App() {
             {healthy === null ? 'CONNECTING...' : healthy ? 'API ONLINE' : 'API OFFLINE'}
           </div>
           <div className="scenario-badge">{scenarioLabel}</div>
-          <div className="clock">{ts()}</div>
+          <div className="clock">{clock}</div>
         </div>
       </header>
 

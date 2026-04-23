@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 
-const WS_URL = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace(/^http/, 'ws');
+// Fix BUG-F7: Handle potential trailing slash in API_URL
+const BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+const WS_URL = BASE_URL.replace(/^http/, 'ws');
 
 export function useWebSocket() {
   const [wsData, setWsData] = useState({
@@ -11,15 +13,20 @@ export function useWebSocket() {
   });
   
   const ws = useRef(null);
+  // FEAT-4: Exponential backoff
+  const reconnectAttempts = useRef(0);
+  const maxDelay = 30000;
 
   useEffect(() => {
     let reconnectTimeout;
     
     function connect() {
+      // Fix BUG-F7: Ensure clean URL joining
       ws.current = new WebSocket(`${WS_URL}/api/ws`);
       
       ws.current.onopen = () => {
         console.log('WS connected');
+        reconnectAttempts.current = 0; // Reset on success
       };
 
       ws.current.onmessage = (event) => {
@@ -28,7 +35,8 @@ export function useWebSocket() {
           
           setWsData(prev => {
             const newState = { ...prev };
-            newState.events = [data, ...prev.events].slice(0, 50); // keep last 50 events
+            // Ensure only latest 50 events are kept (FEAT-4)
+            newState.events = [data, ...prev.events].slice(0, 50);
             
             if (data.type === 'V2G_EARNINGS_UPDATE') {
               newState.earningsBySession = {
@@ -56,8 +64,13 @@ export function useWebSocket() {
       };
 
       ws.current.onclose = () => {
-        console.log('WS disconnected, reconnecting...');
-        reconnectTimeout = setTimeout(connect, 3000);
+        // FEAT-4: Exponential backoff
+        const delay = Math.min(maxDelay, 1000 * Math.pow(2, reconnectAttempts.current));
+        console.log(`WS disconnected, reconnecting in ${delay}ms...`);
+        reconnectTimeout = setTimeout(() => {
+          reconnectAttempts.current++;
+          connect();
+        }, delay);
       };
       
       ws.current.onerror = (err) => {
@@ -71,7 +84,7 @@ export function useWebSocket() {
     return () => {
       clearTimeout(reconnectTimeout);
       if (ws.current) {
-        ws.current.onclose = null;
+        ws.current.onclose = null; // Prevent reconnect loop on unmount
         ws.current.close();
       }
     };

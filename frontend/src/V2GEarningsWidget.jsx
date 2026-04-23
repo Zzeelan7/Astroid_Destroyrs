@@ -6,15 +6,13 @@ export default function V2GEarningsWidget({ wsData }) {
   const sessions = Object.values(wsData.earningsBySession);
   
   // Total compensated so far
-  const totalCompensated = sessions.length > 0 ? sessions[0].total_paid : 0;
+  // Fix BUG-F4: Add guard for sessions
+  const totalCompensated = sessions.length > 0 ? (sessions[0].total_paid || 0) : 0;
   
-  // Create a mock sparkline for earnings over the last 10 minutes based on events
-  const earningsEvents = wsData.events.filter(e => e.type === 'V2G_EARNINGS_UPDATE').reverse();
+  // Create a sparkline for earnings over the last 10 minutes based on events
+  // Fix BUG-F8: Use slice().reverse() to avoid mutation
+  const earningsEvents = wsData.events.filter(e => e.type === 'V2G_EARNINGS_UPDATE').slice().reverse();
   const sparklineData = earningsEvents.map((e, i) => ({ i, val: e.total_paid }));
-
-  if (sparklineData.length === 0) {
-    sparklineData.push({ i: 0, val: totalCompensated });
-  }
 
   return (
     <div className="panel panel-v2g-earnings" style={{ marginTop: '1rem', border: '1px solid #4ade80' }}>
@@ -31,12 +29,19 @@ export default function V2GEarningsWidget({ wsData }) {
         </div>
         
         <div className="earnings-sparkline" style={{ width: '150px', height: '60px' }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={sparklineData}>
-              <YAxis domain={['dataMin', 'dataMax']} hide />
-              <Line type="monotone" dataKey="val" stroke="#4ade80" strokeWidth={2} dot={false} isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
+          {/* Fix BUG-F4: Add guard for sparkline */}
+          {sparklineData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={sparklineData}>
+                <YAxis domain={['dataMin', 'dataMax']} hide />
+                <Line type="monotone" dataKey="val" stroke="#4ade80" strokeWidth={2} dot={false} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ color: '#444', fontSize: '0.75rem', textAlign: 'center', display: 'flex', alignItems: 'center', height: '100%' }}>
+              AWAITING V2G ACTIVITY...
+            </div>
+          )}
         </div>
       </div>
     </div>

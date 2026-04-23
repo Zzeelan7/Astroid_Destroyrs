@@ -20,14 +20,22 @@ async def lifespan(app: FastAPI):
     ev_task   = asyncio.create_task(simulator.run_auto_ev(), name="ev_sim")
     external_task = asyncio.create_task(simulator.run_external_feed(), name="external_feed")
     yield
+    
+    print("[*] GridCharge API shutting down — canceling tasks...")
     grid_task.cancel()
     ev_task.cancel()
     external_task.cancel()
-    try:
-        await asyncio.gather(grid_task, ev_task, external_task, return_exceptions=True)
-    except Exception:
-        pass
-    print("[*] GridCharge API shutdown")
+    
+    # Fix BUG-D2: Wrap each task individually in shutdown block
+    for task in [grid_task, ev_task, external_task]:
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"Error during task {task.get_name()} shutdown: {e}")
+            
+    print("[*] GridCharge API shutdown complete")
 
 
 app = FastAPI(

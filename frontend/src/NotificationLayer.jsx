@@ -1,10 +1,18 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
 
 export default function NotificationLayer({ wsData }) {
+  // Fix BUG-F3: Use useRef to track processed events
+  const lastEventRef = useRef(null);
+
   useEffect(() => {
     if (wsData.events.length > 0) {
       const latest = wsData.events[0];
+      
+      // Compare by timestamp or object reference to prevent duplicate toasts
+      if (lastEventRef.current === latest) return;
+      lastEventRef.current = latest;
+
       if (latest.type === 'GSI_THRESHOLD_CROSSED') {
         if (latest.new_status === 'Red') {
           toast.error(`Grid Stress Alert! GSI crossed ${latest.gsi_score.toFixed(1)}. Initiating V2G Discharge.`, {
